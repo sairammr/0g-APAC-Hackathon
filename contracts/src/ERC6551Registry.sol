@@ -26,14 +26,14 @@ contract ERC6551Registry is IERC6551Registry {
         return _computeAddress(_creationCode(impl, salt, chainId, tc, tid), salt);
     }
 
-    function _creationCode(address impl, bytes32, uint256 chainId, address tc, uint256 tid)
+    function _creationCode(address impl, bytes32 salt, uint256 chainId, address tc, uint256 tid)
         internal pure returns (bytes memory)
     {
         return abi.encodePacked(
             hex"3d60ad80600a3d3981f3363d3d373d3d3d363d73",
             impl,
             hex"5af43d82803e903d91602b57fd5bf3",
-            abi.encode(chainId, tc, tid)
+            abi.encode(salt, chainId, tc, tid)
         );
     }
 

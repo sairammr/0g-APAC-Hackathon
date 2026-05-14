@@ -28,7 +28,7 @@ contract ERC6551Account is IERC6551Account, IERC6551Executable, IERC165, IERC127
     }
 
     function isValidSigner(address signer, bytes calldata) external view returns (bytes4) {
-        return signer == owner() ? IERC6551Account.isValidSigner.selector : bytes4(0);
+        return _isAuthorizedCaller(signer) ? IERC6551Account.isValidSigner.selector : bytes4(0);
     }
 
     function isValidSignature(bytes32, bytes memory) external pure returns (bytes4) {
@@ -38,12 +38,22 @@ contract ERC6551Account is IERC6551Account, IERC6551Executable, IERC165, IERC127
     function execute(address to, uint256 value, bytes calldata data, uint8 operation)
         external payable returns (bytes memory result)
     {
-        require(msg.sender == owner(), "not authorized");
+        require(_isAuthorizedCaller(msg.sender), "not authorized");
         require(operation == 0, "only call");
         ++_nonce;
         bool ok;
         (ok, result) = to.call{value: value}(data);
         require(ok, _bubble(result));
+    }
+
+    function _isAuthorizedCaller(address sender) internal view returns (bool) {
+        address o = owner();
+        if (o == address(0)) return false;
+        if (sender == o) return true;
+        (, address tc, uint256 tid) = token();
+        if (IERC721(tc).isApprovedForAll(o, sender)) return true;
+        if (IERC721(tc).getApproved(tid) == sender) return true;
+        return false;
     }
 
     function _bubble(bytes memory result) private pure returns (string memory) {
