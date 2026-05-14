@@ -1516,6 +1516,13 @@ contract DeployDEX is Script {
 cast code <candidate_factory> --rpc-url https://evmrpc.0g.ai
 ```
 
+**Testnet probe (2026-05-14):** Checked Galileo testnet (`https://evmrpc-testnet.0g.ai`) for three well-known V2 Factory addresses:
+- UniswapV2 mainnet factory `0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f` → `0x` (no code)
+- SushiSwap V2 mainnet factory `0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac` → `0x` (no code)
+- PancakeSwap V2 BSC factory `0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73` → `0x` (no code)
+
+All candidates returned `0x` — V2 deployment deferred; runtime swap tests will use a stub or skip the trade leg for now. `DeployDEX.s.sol` is written and compiles, but cannot be executed until `UNI_FACTORY` / `UNI_ROUTER` env vars are populated (either by deploying V2 separately via Hardhat with solc 0.5/0.6, or by a 0.8 port). Follow-up task tracked for Phase A revisit; Phase B runtime can be exercised against a local Anvil fork with V2 deployed under its native solc.
+
 - [ ] **Step 3: If no existing DEX, deploy our own V2**
 
 In a side directory, clone `Uniswap/v2-core` and `v2-periphery`, deploy via Hardhat against 0G mainnet. Record factory + router addresses.
