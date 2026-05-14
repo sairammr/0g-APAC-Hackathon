@@ -11,23 +11,21 @@ export function generateKeypair(): Keypair {
 }
 
 // ECIES: ephemeral ECDH -> AES-GCM(key=KDF(shared)) || ephemeralPubkey || iv || ciphertext+tag
-export async function encryptToPubkey(recipientPub: Uint8Array, plaintext: Uint8Array): Promise<Buffer> {
+export function encryptToPubkey(recipientPub: Uint8Array, plaintext: Uint8Array): Buffer {
   const ephemeral = utils.randomSecretKey();
   const ephPub = getPublicKey(ephemeral, false);
-  const shared = getSharedSecret(ephemeral, recipientPub, true).slice(1); // strip 0x02/03
-  const key = shared.slice(0, 32); // KDF: use first 32 bytes -- for production, use HKDF
+  const key = getSharedSecret(ephemeral, recipientPub, true).slice(1, 33); // strip SEC 1 prefix byte (0x02 or 0x03)
   const iv = randomBytes(12);
   const cipher = gcm(key, iv);
   const ct = cipher.encrypt(plaintext);
   return Buffer.concat([Buffer.from(ephPub), iv, Buffer.from(ct)]);
 }
 
-export async function decryptWithPrivkey(privateKey: Uint8Array, blob: Buffer): Promise<Buffer> {
+export function decryptWithPrivkey(privateKey: Uint8Array, blob: Buffer): Buffer {
   const ephPub = blob.subarray(0, 65);
   const iv = blob.subarray(65, 65 + 12);
   const ct = blob.subarray(65 + 12);
-  const shared = getSharedSecret(privateKey, ephPub, true).slice(1);
-  const key = shared.subarray(0, 32);
+  const key = getSharedSecret(privateKey, ephPub, true).slice(1, 33); // strip SEC 1 prefix byte (0x02 or 0x03)
   const cipher = gcm(key, iv);
   const pt = cipher.decrypt(ct);
   return Buffer.from(pt);
