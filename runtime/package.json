@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "build": "tsc",
-    "test": "vitest"
+    "test": "vitest",
+    "loop": "tsx src/main.ts"
   },
   "dependencies": {
     "@0gfoundation/0g-compute-ts-sdk": "^0.8.3",
