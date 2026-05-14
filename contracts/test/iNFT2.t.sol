@@ -73,4 +73,20 @@ contract iNFT2Test is Test {
         assertEq(keys2.keyOf(id), hex"04bbcc");
         assertEq(keys2.keyOwner(id), bob);
     }
+
+    function test_vanillaTransferFrom_reverts() public {
+        vm.prank(alice);
+        uint256 id = inft.mint(alice, keccak256("v1"), "0g://1", hex"04aabb");
+        vm.prank(alice);
+        vm.expectRevert("use transferWithReKey");
+        inft.transferFrom(alice, bob, id);
+    }
+
+    function test_safeTransferFrom_reverts() public {
+        vm.prank(alice);
+        uint256 id = inft.mint(alice, keccak256("v1"), "0g://1", hex"04aabb");
+        vm.prank(alice);
+        vm.expectRevert("use transferWithReKey");
+        inft.safeTransferFrom(alice, bob, id);
+    }
 }

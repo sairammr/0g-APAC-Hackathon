@@ -18,6 +18,8 @@ contract iNFT2 is ERC721, EIP712, IERC7857 {
     BrainKeyRegistry public immutable keyRegistry;
     address public immutable oracle;
 
+    bool private _reKeying;
+
     bytes32 private constant TRANSFER_TYPEHASH = keccak256(
         "Transfer(uint256 tokenId,address from,address to,bytes32 newBrainRoot,string newURI)"
     );
@@ -68,6 +70,7 @@ contract iNFT2 is ERC721, EIP712, IERC7857 {
         bytes32 newBrainRoot, string calldata newURI,
         bytes calldata sealedKey, bytes calldata oracleProof
     ) external override {
+        require(to != address(0), "zero to");
         require(ownerOf(tokenId) == from, "wrong from");
         require(_isAuthorized(from, msg.sender, tokenId), "not authorized");
 
@@ -81,10 +84,19 @@ contract iNFT2 is ERC721, EIP712, IERC7857 {
         _uri[tokenId] = newURI;
 
         _transferKeyOwner(tokenId, to, sealedKey);
+        _reKeying = true;
         _transfer(from, to, tokenId);
+        _reKeying = false;
 
         emit BrainUpdated(tokenId, prev, newBrainRoot, newURI);
         emit BrainReKeyed(tokenId, from, to, newBrainRoot);
+    }
+
+    function _beforeTokenTransfer(address from, address to, uint256 firstTokenId, uint256 batchSize) internal override {
+        super._beforeTokenTransfer(from, to, firstTokenId, batchSize);
+        if (from != address(0) && to != address(0)) {
+            require(_reKeying, "use transferWithReKey");
+        }
     }
 
     function _transferKeyOwner(uint256 id, address newOwner, bytes memory pubkey) internal {
