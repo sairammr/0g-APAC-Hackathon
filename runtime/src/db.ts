@@ -54,3 +54,35 @@ export async function equitySeries(tokenId: bigint): Promise<bigint[]> {
   if (error) throw error;
   return (data ?? []).map((r: any) => BigInt(r.value as string));
 }
+
+export type PendingTransfer = {
+  id: number;
+  token_id: string;
+  from_addr: string;
+  to_addr: string;
+  new_brain_root: string; // hex of buyer pubkey, abused as a queue field; see backend/main.ts
+};
+
+export async function listPendingTransfers(): Promise<PendingTransfer[]> {
+  const { data, error } = await db()
+    .from('transfers')
+    .select('id, token_id, from_addr, to_addr, new_brain_root')
+    .eq('tx_hash', 'pending');
+  if (error) throw error;
+  return (data ?? []) as PendingTransfer[];
+}
+
+export async function markTransferDone(id: number, txHash: string, newBrainRoot: string) {
+  const { error } = await db().from('transfers').update({
+    tx_hash: txHash,
+    new_brain_root: newBrainRoot,
+  }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function markTransferFailed(id: number, reason: string) {
+  const { error } = await db().from('transfers').update({
+    tx_hash: `error:${reason.slice(0, 200)}`,
+  }).eq('id', id);
+  if (error) throw error;
+}

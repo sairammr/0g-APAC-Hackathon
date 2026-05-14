@@ -9,7 +9,8 @@ import { signIntent, submitChildIntent, nextNonce, buildSwap, buildApprove, type
 import { publishSnapshot } from './snapshot.js';
 import { netValue, computeSharpeE6, balanceOf } from './pnl.js';
 import { pub, addr, abis } from './chain.js';
-import { insertEquity, insertTick, equitySeries } from './db.js';
+import { insertEquity, insertTick, equitySeries, listPendingTransfers, markTransferDone, markTransferFailed } from './db.js';
+import { reKeyAndTransfer } from './transfer.js';
 
 const log = pino({ level: process.env.LOG_LEVEL || 'info' });
 
@@ -29,7 +30,15 @@ const DEX_AVAILABLE = DUSD !== '0x0000000000000000000000000000000000000000'
 
 const TICK_INTERVAL_MS = Number(process.env.TICK_INTERVAL_MS || 60_000);
 const SNAPSHOT_EVERY_MS = Number(process.env.SNAPSHOT_EVERY_MS || 6 * 3600 * 1000);
+const TRANSFER_POLL_MS = Number(process.env.TRANSFER_POLL_MS || 15_000);
 const DB_ENABLED = !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// Brain encryption private key. Defaults to the operator's EOA private key —
+// SeedDemo.s.sol registers operator-derived pubkey as the brain pubkey for
+// every minted iNFT. Override with BRAIN_PRIVKEY if you used a different
+// key in the seed step.
+const BRAIN_PRIVKEY_HEX = (process.env.BRAIN_PRIVKEY || process.env.PRIVATE_KEY || '').replace(/^0x/, '');
+const BRAIN_PRIVKEY = BRAIN_PRIVKEY_HEX ? Buffer.from(BRAIN_PRIVKEY_HEX, 'hex') : null;
 
 let lastSnapshotAt = 0;
 const lastActionByChild: Record<string, string> = {};
@@ -39,6 +48,26 @@ async function getWallet(tokenId: bigint): Promise<`0x${string}`> {
     address: addr.AgentController, abi: abis.ctrl,
     functionName: 'walletOf', args: [tokenId],
   }) as Promise<`0x${string}`>;
+}
+
+const ZERO_ROOT = ('0x' + '00'.repeat(32)) as `0x${string}`;
+
+async function getBrainRoots(tokenId: bigint): Promise<{ prev: `0x${string}`; curr: `0x${string}` }> {
+  try {
+    const [curr, prev] = await Promise.all([
+      pub.readContract({
+        address: addr.iNFT2, abi: abis.inft,
+        functionName: 'latestBrainRoot', args: [tokenId],
+      }) as Promise<`0x${string}`>,
+      pub.readContract({
+        address: addr.iNFT2, abi: abis.inft,
+        functionName: 'prevBrainRoot', args: [tokenId],
+      }) as Promise<`0x${string}`>,
+    ]);
+    return { prev, curr };
+  } catch {
+    return { prev: ZERO_ROOT, curr: ZERO_ROOT };
+  }
 }
 
 async function runChild(child: { id: bigint; strat: string }, market: { price: number; sma20: number; sma50: number }) {
@@ -145,10 +174,11 @@ async function snapshotAll(price: number) {
       const sharpe = computeSharpeE6(series);
       const equity = DEX_AVAILABLE ? await netValue(wallet, DUSD, DRISK, price) : 0n;
       const realizedPnL = series.length > 0 ? equity - series[0] : 0n;
+      const { prev: prevBrainRoot, curr: currBrainRoot } = await getBrainRoots(id);
       const { root, tx } = await publishSnapshot({
         tokenId: id,
-        prevBrainRoot: ('0x' + '00'.repeat(32)) as `0x${string}`,
-        currBrainRoot: ('0x' + '00'.repeat(32)) as `0x${string}`,
+        prevBrainRoot,
+        currBrainRoot,
         realizedPnL,
         sharpeE6: sharpe,
         memoryDiff: Buffer.alloc(0),
@@ -184,14 +214,70 @@ async function loopOnce() {
   }
 }
 
+async function processOnePendingTransfer() {
+  if (!DB_ENABLED || !BRAIN_PRIVKEY) return;
+  let pending: Awaited<ReturnType<typeof listPendingTransfers>>;
+  try {
+    pending = await listPendingTransfers();
+  } catch (e: any) {
+    log.warn({ err: e?.message }, 'transfer queue read failed');
+    return;
+  }
+  for (const row of pending) {
+    const tokenId = BigInt(row.token_id);
+    const buyerPubkeyHex = row.new_brain_root.replace(/^0x/, '');
+    if (!buyerPubkeyHex || buyerPubkeyHex.length !== 130) {
+      await markTransferFailed(row.id, 'invalid buyer pubkey').catch(() => {});
+      continue;
+    }
+    try {
+      const currentBrainRoot = await pub.readContract({
+        address: addr.iNFT2, abi: abis.inft,
+        functionName: 'latestBrainRoot', args: [tokenId],
+      }) as `0x${string}`;
+      const fromAddr = await pub.readContract({
+        address: addr.iNFT2, abi: abis.inft,
+        functionName: 'ownerOf', args: [tokenId],
+      }) as `0x${string}`;
+      const buyerPubkey = Buffer.from(buyerPubkeyHex, 'hex');
+      const { tx, newRoot } = await reKeyAndTransfer(
+        tokenId, fromAddr, row.to_addr as `0x${string}`,
+        currentBrainRoot, BRAIN_PRIVKEY, buyerPubkey,
+      );
+      await markTransferDone(row.id, tx, newRoot);
+      log.info({ tokenId: tokenId.toString(), buyer: row.to_addr, tx }, 'transfer completed');
+    } catch (e: any) {
+      log.error({ tokenId: tokenId.toString(), err: e?.shortMessage || e?.message }, 'transfer failed');
+      await markTransferFailed(row.id, e?.shortMessage || e?.message || 'unknown').catch(() => {});
+    }
+  }
+}
+
+async function transferLoop() {
+  while (true) {
+    try { await processOnePendingTransfer(); } catch (e: any) {
+      log.error({ err: e?.message }, 'transferLoop error');
+    }
+    await new Promise(r => setTimeout(r, TRANSFER_POLL_MS));
+  }
+}
+
 async function main() {
   log.info({
     manager: MANAGER_ID.toString(),
     children: CHILDREN.map(c => `${c.id}:${c.strat}`),
     dexAvailable: DEX_AVAILABLE,
     dbEnabled: DB_ENABLED,
+    brainKeyLoaded: !!BRAIN_PRIVKEY,
     tickIntervalMs: TICK_INTERVAL_MS,
+    transferPollMs: TRANSFER_POLL_MS,
   }, 'starting iNFT² runtime');
+
+  // Kick off transfer queue drain in parallel with the trading loop.
+  if (DB_ENABLED && BRAIN_PRIVKEY) {
+    transferLoop().catch(e => log.error({ err: e?.message }, 'transferLoop crashed'));
+  }
+
   while (true) {
     await loopOnce();
     await new Promise(r => setTimeout(r, TICK_INTERVAL_MS));

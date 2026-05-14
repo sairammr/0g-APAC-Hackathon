@@ -3,7 +3,29 @@ import cors from '@fastify/cors';
 import { startIndexer } from './indexer/chain.js';
 import { processUnfetched } from './indexer/snapshots.js';
 import { supabase } from './db/supabase.js';
+import { createPublicClient, http, defineChain, parseAbi } from 'viem';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
+
+const deployments = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL('../../contracts/deployments/testnet.json', import.meta.url)),
+    'utf8',
+  ),
+);
+
+const zg = defineChain({
+  id: deployments.chainId,
+  name: '0G Galileo',
+  network: '0g-galileo',
+  nativeCurrency: { name: '0G', symbol: '0G', decimals: 18 },
+  rpcUrls: { default: { http: [process.env.RPC_URL || deployments.rpc] } },
+});
+const pub = createPublicClient({ chain: zg, transport: http() });
+const inftAbi = parseAbi([
+  'function ownerOf(uint256 tokenId) view returns (address)',
+]);
 
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
@@ -62,7 +84,10 @@ app.get('/api/agent/:id/snapshots', async (req: any) => {
   return data ?? [];
 });
 
-// Stub for D.6 buy flow — actual reKeyAndTransfer call will be wired to the runtime later.
+// Buy flow: queue a re-keyed transfer for the runtime to execute.
+// The buyer's uncompressed secp256k1 pubkey is stashed in `new_brain_root`
+// during the pending state — the runtime overwrites it with the actual
+// new brain Merkle root after reKeyAndTransfer succeeds.
 app.post('/api/transfer/initiate', async (req: any) => {
   const { tokenId, buyer, buyerPubkey } = req.body as {
     tokenId: string;
@@ -72,16 +97,32 @@ app.post('/api/transfer/initiate', async (req: any) => {
   if (!tokenId || !buyer || !buyerPubkey) {
     return { error: 'tokenId, buyer, buyerPubkey required' };
   }
-  // v1: queue in Supabase; runtime poll-handler will pick it up. For now just acknowledge.
+  const cleanPubkey = buyerPubkey.replace(/^0x/, '');
+  if (!/^04[0-9a-fA-F]{128}$/.test(cleanPubkey)) {
+    return { error: 'buyerPubkey must be uncompressed secp256k1 (130 hex chars starting with 04)' };
+  }
+
+  let from: `0x${string}` = '0x0000000000000000000000000000000000000000';
+  try {
+    from = await pub.readContract({
+      address: deployments.iNFT2 as `0x${string}`,
+      abi: inftAbi,
+      functionName: 'ownerOf',
+      args: [BigInt(tokenId)],
+    }) as `0x${string}`;
+  } catch (e: any) {
+    app.log.warn({ err: e?.shortMessage || e?.message, tokenId }, 'ownerOf failed; queueing with zero from');
+  }
+
   await supabase().from('transfers').insert({
     token_id: tokenId,
-    from_addr: '0x0000000000000000000000000000000000000000',
+    from_addr: from,
     to_addr: buyer,
-    new_brain_root: '',
+    new_brain_root: cleanPubkey,
     tx_hash: 'pending',
     ts: Math.floor(Date.now() / 1000),
   });
-  return { status: 'queued', tokenId, buyer };
+  return { status: 'queued', tokenId, buyer, from };
 });
 
 // Boot indexer + snapshot fetcher in background; do not fail boot if they crash.
