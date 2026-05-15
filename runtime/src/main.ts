@@ -21,9 +21,9 @@ const CHILDREN: { id: bigint; strat: 'momentum' | 'meanRev' | 'marketMaker' }[] 
   { id: BigInt(process.env.MM_ID  || 5), strat: 'marketMaker' },
 ];
 
-const DUSD = (process.env.DUSD ?? '0x0000000000000000000000000000000000000000') as `0x${string}`;
-const DRISK = (process.env.DRISK ?? '0x0000000000000000000000000000000000000000') as `0x${string}`;
-const ROUTER = (process.env.UNI_ROUTER ?? '0x0000000000000000000000000000000000000000') as `0x${string}`;
+const DUSD = (process.env.DUSD || '0x0000000000000000000000000000000000000000') as `0x${string}`;
+const DRISK = (process.env.DRISK || '0x0000000000000000000000000000000000000000') as `0x${string}`;
+const ROUTER = (process.env.UNI_ROUTER || '0x0000000000000000000000000000000000000000') as `0x${string}`;
 const DEX_AVAILABLE = DUSD !== '0x0000000000000000000000000000000000000000'
   && DRISK !== '0x0000000000000000000000000000000000000000'
   && ROUTER !== '0x0000000000000000000000000000000000000000';

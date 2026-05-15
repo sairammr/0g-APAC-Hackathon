@@ -43,7 +43,15 @@ const events = {
 };
 
 const META_KEY = 'last_indexed_block';
-const CHUNK = 5_000n;
+const CHUNK = 500n;
+
+const eventAddress: Record<string, `0x${string}`> = {
+  BrainUpdated: deployments.iNFT2,
+  Transfer: deployments.iNFT2,
+  BrainReKeyed: deployments.iNFT2,
+  SnapshotPublished: deployments.SnapshotAttestor,
+  IntentExecuted: deployments.AgentController,
+};
 
 export async function startIndexer() {
   let fromBlock = await getLastIndexedBlock();
@@ -103,7 +111,7 @@ async function indexRange(fromBlock: bigint, toBlock: bigint) {
   for (const [name, ev] of Object.entries(events)) {
     let logs: any[] = [];
     try {
-      logs = await pub.getLogs({ event: ev as any, fromBlock, toBlock });
+      logs = await pub.getLogs({ address: eventAddress[name], event: ev as any, fromBlock, toBlock });
     } catch (e: any) {
       console.warn(
         `[indexer] getLogs(${name}) failed for ${fromBlock}-${toBlock}:`,
