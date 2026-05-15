@@ -65,7 +65,7 @@ export type InferResult = {
 export async function infer(
   systemPrompt: string,
   userPrompt: string,
-  model = 'zai-org/GLM-5-FP8'
+  model = process.env.ZG_MODEL || 'qwen/qwen-2.5-7b-instruct'
 ): Promise<InferResult> {
   // The OpenAI SDK's request type doesn't know about 0G's custom fields
   // (`verify_tee`, `chat_template_kwargs`); we pass them through as
