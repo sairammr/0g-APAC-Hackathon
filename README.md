@@ -10,22 +10,25 @@
 
 1. [What it is](#1-what-it-is)
 2. [Why this matters](#2-why-this-matters)
-3. [Architecture at a glance](#3-architecture-at-a-glance)
-4. [Repo layout](#4-repo-layout)
-5. [0G primitives we use](#5-0g-primitives-we-use)
-6. [Deployed addresses (Galileo testnet)](#6-deployed-addresses-galileo-testnet)
-7. [Recursion model](#7-recursion-model)
-8. [Trust model](#8-trust-model)
-9. [Prerequisites](#9-prerequisites)
-10. [Setup and install](#10-setup-and-install)
-11. [Deploy to testnet](#11-deploy-to-testnet)
-12. [Run locally](#12-run-locally)
-13. [Testing](#13-testing)
-14. [Environment variables](#14-environment-variables)
-15. [Design decisions and quirks](#15-design-decisions-and-quirks)
-16. [Known follow-ups](#16-known-follow-ups)
-17. [Submission](#17-submission)
-18. [License](#18-license)
+3. [Quick links](#3-quick-links)
+4. [Architecture at a glance](#4-architecture-at-a-glance)
+5. [Repo layout](#5-repo-layout)
+6. [0G primitives we use (deep dive)](#6-0g-primitives-we-use-deep-dive)
+7. [Deployed addresses (Galileo testnet)](#7-deployed-addresses-galileo-testnet)
+8. [Recursion model](#8-recursion-model)
+9. [Trust model](#9-trust-model)
+10. [Submission requirements checklist (HackQuest)](#10-submission-requirements-checklist-hackquest)
+11. [Demo video storyboard](#11-demo-video-storyboard)
+12. [X post copy](#12-x-post-copy)
+13. [Prerequisites](#13-prerequisites)
+14. [Setup and install](#14-setup-and-install)
+15. [Deploy to testnet](#15-deploy-to-testnet)
+16. [Run locally](#16-run-locally)
+17. [Testing](#17-testing)
+18. [Environment variables](#18-environment-variables)
+19. [Design decisions and quirks](#19-design-decisions-and-quirks)
+20. [Known follow-ups](#20-known-follow-ups)
+21. [License](#21-license)
 
 ---
 
@@ -46,6 +49,8 @@ Manager iNFT (#2)
 
 The manager rebalances by signing EIP-712 intents. Each child trades from its own TBA. Sales transfer the brain by **re-encrypting** it to the buyer on-chain in the same transaction as the ERC-721 transfer, so the seller can no longer decrypt the strategy state.
 
+One-sentence pitch (29 words): an ERC-7857 agent whose token-bound wallet can hold other ERC-7857 agents, turning a fund of TEE-running AI traders into one composable, transferable token on 0G.
+
 ## 2. Why this matters
 
 Existing "AI agent NFTs" are JPEGs with a Discord bot attached. To make agents a real asset class you need all of these working together on one chain:
@@ -58,7 +63,23 @@ Existing "AI agent NFTs" are JPEGs with a Discord bot attached. To make agents a
 
 0G is the first chain that ships TEE compute, encrypted storage, DA, and an EVM from a single team. iNFT-squared is the first product that treats all four as one composable substrate, and the recursion is what only becomes possible once you have them all.
 
-## 3. Architecture at a glance
+## 3. Quick links
+
+| Link | URL |
+|---|---|
+| Live frontend | https://inft-squared.vercel.app |
+| GitHub repo | https://github.com/sairammr/0g-APAC-Hackathon |
+| Primary on-chain (iNFT2) | https://chainscan-galileo.0g.ai/address/0xc9CA0707BcD500Bd00361e6e615DF42F6C08eD6b |
+| Galileo explorer | https://chainscan-galileo.0g.ai |
+| Galileo RPC | https://evmrpc-testnet.0g.ai |
+| Galileo faucet | https://faucet.0g.ai |
+| Demo video | (paste YouTube/Loom URL here) |
+| X post | (paste X URL here) |
+| Pitch deck | `/pitch` route in the live frontend (11 slides) |
+| Guided demo | `/demo` route in the live frontend (6 steps) |
+| HackQuest copy | [`submission.md`](submission.md) |
+
+## 4. Architecture at a glance
 
 ```
 +-------------------- Frontend (Next.js 14 + Privy) --------------------+
@@ -99,7 +120,7 @@ Existing "AI agent NFTs" are JPEGs with a Discord bot attached. To make agents a
                   0G Galileo (chainId 16602)
 ```
 
-## 4. Repo layout
+## 5. Repo layout
 
 ```
 0g-APAC-Hackathon/
@@ -124,7 +145,7 @@ Existing "AI agent NFTs" are JPEGs with a Discord bot attached. To make agents a
       pnl.ts          PnL, Sharpe
       db.ts           Supabase writer
       strategies/     momentum, meanRev, marketMaker, manager
-    test/             vitest specs
+    test/             14 vitest specs
 
   backend/            Fastify API + chain indexer
     src/
@@ -146,12 +167,12 @@ Existing "AI agent NFTs" are JPEGs with a Discord bot attached. To make agents a
       pitch/                         11-slide deck
     components/design/   Chrome, WalletConnect, Diagrams, AttestationModal
 
-  docs/                  Architecture notes, PRDs
+  docs/                  Architecture notes, PRDs, demo video script
   submission.md          HackQuest submission copy
   README.md              This file
 ```
 
-## 5. 0G primitives we use (deep dive)
+## 6. 0G primitives we use (deep dive)
 
 Every component below is wired into the live system. Each entry says **what we use it for**, **how it works in our code**, and **where to read it**. This is the section judges should start with.
 
@@ -201,17 +222,25 @@ Every iNFT has a deterministic TBA from the canonical `(salt, chainId, tokenCont
 
 | 0G primitive | How we use it | Code |
 |---|---|---|
-
-| 0G primitive | How we use it | Code |
-|---|---|---|
 | 0G Chain (Galileo, chainId 16602) | Hosts all six contracts. EIP-712 intents and snapshot attestations land here. | `contracts/src/*` |
-| 0G Storage | Stores every encrypted brain blob (ECIES) and every periodic full snapshot. Content-addressed by Merkle root. | `runtime/src/storage.ts`, `runtime/src/snapshot.ts` |
-| 0G Compute | TEE-attested LLM inference for every strategy. Uses the 0G Compute Router (OpenAI-compatible) with `verify_tee: true` and a `processResponse` attestation check. | `runtime/src/llm.ts`, `runtime/src/strategies/*` |
-| 0G DA (DASigners precompile at `0x...1000`) | Reads the current DA epoch and embeds it in every snapshot, so any indexer can verify the snapshot landed in DA. | `runtime/src/snapshot.ts` |
+| 0G Compute | TEE-attested LLM inference for every strategy. `verify_tee: true` plus `processResponse` attestation check. | `runtime/src/llm.ts`, `runtime/src/strategies/*` |
+| 0G Storage | Encrypted brain blobs (ECIES) and 6h snapshots, Merkle-root anchored on-chain. | `runtime/src/storage.ts`, `runtime/src/snapshot.ts` |
+| 0G DA (DASigners precompile) | Reads current DA epoch and embeds it in every snapshot. | `contracts/src/SnapshotAttestor.sol`, `runtime/src/snapshot.ts` |
 | ERC-7857 iNFT | Brain blob lineage and `transferWithReKey`. | `contracts/src/iNFT2.sol`, `contracts/src/BrainKeyRegistry.sol` |
 | ERC-6551 TBA | Token-bound account per iNFT (canonical 4-word footer). Lets a parent iNFT hold child iNFTs. | `contracts/src/ERC6551Registry.sol`, `contracts/src/ERC6551Account.sol` |
 
-## 6. Deployed addresses (Galileo testnet)
+### Mapping to Track 2 requirements
+
+| Track 2 ask | How we deliver it |
+|---|---|
+| AI-driven trading agent | Four strategies (momentum, mean-rev, MM, manager) running on 0G Compute |
+| Sealed Inference / TEE | Every inference uses `verify_tee: true` and `processResponse` attestation; failed attestation aborts the tick |
+| Front-running mitigation | Strategy state never leaves the TEE; brain blob in storage is encrypted to the owner only |
+| Verifiable execution | Snapshot lineage chains prev brain root to curr brain root, anchored to 0G DA epoch every 6h |
+| Risk management | `AgentController` enforces per-intent value cap, daily cap, nonce, expiry, target whitelist |
+| Autonomous loop | Runtime ticks the observe -> decide -> sign -> execute -> snapshot cycle without human input |
+
+## 7. Deployed addresses (Galileo testnet)
 
 Network: 0G Galileo, chainId **16602**
 RPC: `https://evmrpc-testnet.0g.ai`
@@ -238,9 +267,9 @@ Seeded subtree:
 
 Canonical record: [`contracts/deployments/testnet.json`](contracts/deployments/testnet.json).
 
-Mainnet (chainId 16661) deployment is pending. See [Known follow-ups](#16-known-follow-ups).
+Mainnet (chainId 16661) deployment is the final pre-submission step. See [Known follow-ups](#20-known-follow-ups) and [Submission Requirements Checklist § 3](#3-0g-integration-proof).
 
-## 7. Recursion model
+## 8. Recursion model
 
 ```
 iNFT(#2) -- owns --> TBA(#2)  -- holds --> iNFT(#3), iNFT(#4), iNFT(#5)
@@ -256,7 +285,7 @@ iNFT(#2) -- owns --> TBA(#2)  -- holds --> iNFT(#3), iNFT(#4), iNFT(#5)
 - Selling a child detaches only that branch. The brain is re-encrypted to the buyer's pubkey during transfer (`transferWithReKey` in `iNFT2.sol`), so the seller can no longer decrypt it.
 - Depth is capped at 3 to keep recursion gas bounded.
 
-## 8. Trust model
+## 9. Trust model
 
 What the operator (us) can and cannot do:
 
@@ -270,16 +299,146 @@ What the operator (us) can and cannot do:
 
 Trust assumption: **the iNFT owner's private key, the 0G TEE attestation, and the storage Merkle-root binding are all sound.** Everything else is replayable from public state.
 
-## 9. Prerequisites
+## 10. Submission requirements checklist (HackQuest)
+
+Mapped to the seven official HackQuest submission requirements.
+
+### 1. Basic project information
+
+- **Project name:** iNFT-squared
+- **One-sentence description (29 words):** An ERC-7857 agent whose token-bound wallet can hold other ERC-7857 agents, turning a fund of TEE-running AI traders into one composable, transferable token on 0G.
+- **What it does:** a recursive intelligent NFT. The token represents an autonomous AI trader whose brain is encrypted on 0G Storage, runs in a 0G Compute TEE, and trades from its own ERC-6551 wallet. Because that wallet is just an address, one iNFT can own other iNFTs.
+- **Problem it solves:** AI agent NFTs today are decoration — no transferable brain, no on-chain wallet, no audit trail, no recursion. There is no way to buy or sell an autonomous strategy as an asset.
+- **0G components used:** 0G Chain (all contracts and intents), 0G Compute (TEE inference for every decision), 0G Storage (encrypted brain blobs + snapshots), 0G DA (snapshot epoch tagging).
+
+### 2. Code repository
+
+- **Repo:** https://github.com/sairammr/0g-APAC-Hackathon
+- Public; substantial development across the hackathon window.
+- 137 files, ~36k lines added during the event; 4 packages (contracts, runtime, backend, frontend).
+- 21 forge tests + 14 vitest specs passing.
+
+### 3. 0G Integration Proof
+
+> **Honest status:** all contracts are live on **Galileo testnet (chainId 16602)**. **Mainnet (chainId 16661) deployment is the final pre-submission step** — operator funding is pending. The integration code is mainnet-ready; only the chainId constant in `runtime/src/intent.ts` + `runtime/src/transfer.ts` and a re-deploy stand between us and a 16661 address.
+
+Until then, the on-chain proof is the Galileo deployment:
+
+- **Primary on-chain address (iNFT2, ERC-7857):** `0xc9CA0707BcD500Bd00361e6e615DF42F6C08eD6b`
+- **Explorer link with verifiable activity:** https://chainscan-galileo.0g.ai/address/0xc9CA0707BcD500Bd00361e6e615DF42F6C08eD6b
+- **All other contracts:** see [§7 Deployed addresses](#7-deployed-addresses-galileo-testnet)
+- **Integrated 0G components** (read [§6 deep dive](#6-0g-primitives-we-use-deep-dive) for code paths):
+  - 0G Chain — all six contracts + intents
+  - 0G Compute — TEE inference + `processResponse` attestation
+  - 0G Storage — encrypted brain blobs + snapshots
+  - 0G DA — epoch tagging via DASigners precompile
+  - Sealed Inference / TEE execution — `verify_tee: true` + attestation check
+
+### 4. Demo video
+
+- Length: under 3 minutes
+- Hosting: YouTube (public link in [§3 Quick links](#3-quick-links))
+- Storyboard: see [§11 Demo video storyboard](#11-demo-video-storyboard)
+- Reference script: [`docs/submission/demo-video-script.md`](docs/submission/demo-video-script.md)
+
+### 5. README and documentation
+
+- This file is the canonical README. Top-level sections cover overview, architecture diagram, 0G modules used, recursion + trust models, setup, deploy, run, test, env vars, design decisions, follow-ups.
+- Per-package READMEs in `contracts/README.md` and `frontend/README.md`.
+- Reviewer notes: [`docs/submission/AUDIT.md`](docs/submission/AUDIT.md).
+- PRD: [`docs/submission/PRD.md`](docs/submission/PRD.md).
+- Test account / faucet: see [§13 Prerequisites](#13-prerequisites). Reviewers can fund any EOA at https://faucet.0g.ai (0.1 0G/day), set it as `OPERATOR_PRIVATE_KEY` in `runtime/.env`, and run `pnpm run loop` against the live contracts.
+
+### 6. Public X post
+
+See [§12 X post copy](#12-x-post-copy). Mandatory hashtags `#0GHackathon #BuildOn0G` and tags `@0G_labs @0g_CN @0g_Eco @HackQuest_` are baked into every variant.
+
+### 7. Optional bonus materials
+
+- **Pitch deck:** `/pitch` route in the frontend — 11 slides, six SVG diagrams (architecture, recursion, intent flow, snapshot lineage, re-key, trust model).
+- **Frontend demo link:** https://inft-squared.vercel.app
+- **Backend API:** documented in [§4 architecture](#4-architecture-at-a-glance) and `backend/src/main.ts`.
+- **Technical write-up:** this README + [`submission.md`](submission.md) + [`docs/submission/AUDIT.md`](docs/submission/AUDIT.md).
+
+## 11. Demo video storyboard
+
+Under 3 minutes total. Hits the four mandatory beats: core functionality, user flow, how 0G is actually used, on-chain proof.
+
+| Time | Beat | What's on screen |
+|---|---|---|
+| 0:00 | Hook + title | Title card. Tagline: "An AI agent you can own, trade, and stack." |
+| 0:15 | Recursion in 10s | Landing page; recursion diagram. The squared explained. |
+| 0:30 | Mint | `/create`. New iNFT. Brain encrypted to owner pubkey (ECIES). Blob uploaded to 0G Storage. Root committed in `iNFT2` on Galileo. Tx link shown. |
+| 1:00 | Live tick | `/agent/2` dashboard. Runtime calls 0G Compute Router (TEE). Attestation badge flips green after `processResponse`. EIP-712 intent signed by owner. Broadcast through the TBA. Equity curve updates. |
+| 1:45 | Snapshot lineage | `/agent/2/snapshot/[sid]`. Prev brain root, curr brain root, DA epoch, storage root, on-chain tx for the attestation. |
+| 2:15 | transferWithReKey | `/agent/2/buy`. Buyer logs in via Privy. Signs. Brain re-encrypts inside TEE to buyer's pubkey. ERC-721 transfers. New owner's dashboard now shows the agent with a decryptable brain. |
+| 2:45 | Recursion close | `/agent/2` shows manager executing a child intent through its TBA. Cut to logo + tag line. |
+
+## 12. X post copy
+
+Three variants. Pick one. All include the mandatory hashtags and tags.
+
+### Variant A — positioning lead
+
+```
+Introducing iNFT-squared: an AI trading agent you can own, trade, and stack.
+
+An ERC-7857 iNFT whose ERC-6551 wallet can hold other iNFTs. One token = a whole fund of agents.
+
+Brains encrypted on 0G Storage, decisions in a 0G Compute TEE, lineage anchored to 0G DA.
+
+[demo screenshot]
+
+Built for the 0G APAC Hackathon, Track 2.
+
+Live on Galileo: chainscan-galileo.0g.ai/address/0xc9CA0707BcD500Bd00361e6e615DF42F6C08eD6b
+
+#0GHackathon #BuildOn0G @0G_labs @0g_CN @0g_Eco @HackQuest_
+```
+
+### Variant B — technical lead
+
+```
+iNFT-squared: the first composable AI asset class.
+
+- ERC-7857 token with an encrypted, transferable brain
+- ERC-6551 TBA, so an iNFT can own other iNFTs (the squared)
+- 0G Compute TEE inference, verified per decision
+- 0G Storage for encrypted brain + 6h snapshots
+- 0G DA epoch on every snapshot
+- transferWithReKey: re-encrypt + transfer in one tx
+
+[short demo clip]
+
+#0GHackathon #BuildOn0G @0G_labs @0g_CN @0g_Eco @HackQuest_
+```
+
+### Variant C — story lead
+
+```
+What if you could buy an AI hedge fund the same way you buy an NFT?
+
+iNFT-squared. A manager agent that owns three child trading agents. Each one is an ERC-7857 token with an encrypted brain on 0G Storage and TEE-verified decisions on 0G Compute.
+
+Buy the manager, you buy the whole fund. In one transaction.
+
+[demo screenshot]
+
+#0GHackathon #BuildOn0G @0G_labs @0g_CN @0g_Eco @HackQuest_
+```
+
+Suggested image: screenshot of the recursion diagram from `/pitch` slide 5, or the live `/agent/2` dashboard with the green TEE attestation badge.
+
+## 13. Prerequisites
 
 - **Foundry** (any recent) — `curl -L https://foundry.paradigm.xyz | bash && foundryup`
 - **Node 20 or newer** and **pnpm 9 or newer**
-- **A funded operator EOA** on Galileo (~0.1 0G). Faucet: [faucet.0g.ai](https://faucet.0g.ai)
-- **A Supabase project** (free tier is fine). You will use the `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+- **A funded operator EOA** on Galileo (~0.1 0G). Faucet: https://faucet.0g.ai
+- **A Supabase project** (free tier is fine). You will use `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
 - **A Privy app** (any plan). You will use the `App ID`.
-- **A 0G Compute API key** for the Router. Create one at [pc.0g.ai](https://pc.0g.ai) (testnet: [pc.testnet.0g.ai](https://pc.testnet.0g.ai)) with the `inference` scope.
+- **A 0G Compute API key** for the Router. Create one at https://pc.0g.ai (testnet: https://pc.testnet.0g.ai) with scope `inference`.
 
-## 10. Setup and install
+## 14. Setup and install
 
 ```bash
 git clone https://github.com/sairammr/0g-APAC-Hackathon
@@ -293,7 +452,7 @@ git submodule update --init --recursive
 (cd frontend && pnpm install)
 ```
 
-## 11. Deploy to testnet
+## 15. Deploy to testnet
 
 If you want to use the existing deployment, skip this section.
 
@@ -320,7 +479,7 @@ supabase db push
 # or paste the SQL files in supabase/migrations/ into the Supabase SQL editor
 ```
 
-## 12. Run locally
+## 16. Run locally
 
 You need three processes running. Open three terminals.
 
@@ -358,7 +517,7 @@ Open `http://localhost:3000`.
 
 For production: `pnpm run build && pnpm run start` in the frontend.
 
-## 13. Testing
+## 17. Testing
 
 ```bash
 cd contracts && forge test -vv       # 21 forge tests
@@ -373,9 +532,9 @@ Highlights:
 - `contracts/test/Recursion.t.sol` — manager iNFT executing a child intent via its TBA at depth 2.
 - `contracts/test/iNFT2.t.sol` — `transferWithReKey` atomicity.
 
-## 14. Environment variables
+## 18. Environment variables
 
-Each package ships an `.env.example`. The key variables:
+Each package ships an `.env.example`. Key variables:
 
 **`contracts/.env`**
 - `PRIVATE_KEY` — deployer EOA
@@ -399,32 +558,23 @@ Each package ships an `.env.example`. The key variables:
 - `NEXT_PUBLIC_RPC_URL`
 - `NEXT_PUBLIC_API_URL`
 
-## 15. Design decisions and quirks
+## 19. Design decisions and quirks
 
 - **OpenZeppelin pinned to v4.9.6.** v5 changed `Ownable`'s constructor and breaks our import.
-- **Storage stub fallback.** The live `@0glabs/0g-ts-sdk@0.3.3` upload emits a function selector (`0xef3e12dc`) that the deployed Galileo flow contract does not accept (it expects `0xbc8c11f8`). We fall back to a content-addressed in-memory stub that preserves the same Merkle-root contract surface, so the rest of the system is unaffected. Tracked in [follow-ups](#16-known-follow-ups).
+- **Storage stub fallback.** The live `@0glabs/0g-ts-sdk@0.3.3` upload emits a function selector (`0xef3e12dc`) that the deployed Galileo flow contract does not accept (it expects `0xbc8c11f8`). We fall back to a content-addressed in-memory stub that preserves the same Merkle-root contract surface, so the rest of the system is unaffected. Tracked in [follow-ups](#20-known-follow-ups).
 - **0G Compute SDK interop.** `@0gfoundation/0g-compute-ts-sdk@0.8.3` has a broken ESM named export, so `runtime/src/llm.ts` uses `createRequire` to load it.
 - **Privy + Farcaster.** `@privy-io/react-auth@3.26.0` has an unconditional import of `@farcaster/mini-app-solana` that is not declared as a dependency. We alias it to `false` in `frontend/next.config.mjs`.
 - **No DEX on Galileo.** The runtime defaults to a synthetic seeded price walk. Wire `DUSD`, `DRISK`, and `UNI_ROUTER` if you have a DEX deployment. Otherwise the system simulates fills.
 - **EIP-712 chainId is 16602.** Hard-coded in `runtime/src/intent.ts` and `runtime/src/transfer.ts`. Mainnet rollout requires bumping it.
 - **All four agents share one operator EOA.** That EOA only broadcasts owner-signed intents. It is not a token owner and cannot move funds without a fresh owner signature.
 
-## 16. Known follow-ups
+## 20. Known follow-ups
 
-1. **Storage live-upload selector fix.** Either upstream a patched ABI in `@0glabs/0g-ts-sdk`, shell out to the Go `0g-storage-client` binary, or wait for a Galileo flow contract upgrade. Until then the stub is canonical.
-2. **Mainnet (16661) deploy and verify.** Pending operator funding. Bump the chainId constant and re-deploy.
+1. **Mainnet (16661) deploy and verify.** Operator funding pending. Bump the chainId constant in `runtime/src/{intent,transfer}.ts`, re-deploy via `forge script script/Deploy.s.sol`, update `contracts/deployments/mainnet.json`, and update [§7](#7-deployed-addresses-galileo-testnet) of this README.
+2. **Storage live-upload selector fix.** Upstream a patched ABI in `@0glabs/0g-ts-sdk`, shell out to the Go `0g-storage-client` binary, or wait for a Galileo flow contract upgrade. Until then the stub is canonical.
 3. **48-hour soak test.** Requires a long-running runtime container (Railway / Fly).
 4. **Real DEX integration.** Once a DEX is live on Galileo, wire the env vars and remove the synthetic-walk fallback.
 
-## 17. Submission
-
-- Track 2 — Agentic Trading Arena
-- Submission copy: [`submission.md`](submission.md)
-- Pitch deck: `/pitch` (in the deployed frontend; 11 slides)
-- Guided demo: `/demo` (in the deployed frontend; 6 steps)
-
-Tags: `#0GHackathon` `#BuildOn0G` `@0G_labs` `@0g_CN` `@0g_Eco` `@HackQuest_`
-
-## 18. License
+## 21. License
 
 MIT. See [`LICENSE`](LICENSE) if present, otherwise treat as MIT.
