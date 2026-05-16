@@ -1,12 +1,16 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import { spawn } from 'node:child_process';
 import { startIndexer } from './indexer/chain.js';
 import { processUnfetched } from './indexer/snapshots.js';
 import { supabase } from './db/supabase.js';
+import { getProviderInfo, chatSignatureUrl, raReportUrl } from './attestation.js';
 import { createPublicClient, http, defineChain, parseAbi } from 'viem';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
+
+const RUNTIME_DIR = fileURLToPath(new URL('../../runtime', import.meta.url));
 
 const deployments = JSON.parse(
   readFileSync(
@@ -93,6 +97,102 @@ app.get('/api/agent/:id/ticks', async (req: any) => {
     .order('ts', { ascending: false })
     .limit(50);
   return data ?? [];
+});
+
+app.get('/api/attestation/:tickId', async (req: any, reply: any) => {
+  const tickId = req.params.tickId as string;
+  const { data: tick, error } = (await supabase()
+    .from('ticks')
+    .select('*')
+    .eq('id', tickId)
+    .maybeSingle()) as { data: any; error: any };
+  if (error) return reply.code(500).send({ error: error.message });
+  if (!tick) return reply.code(404).send({ error: 'tick not found' });
+  if (!tick.chat_id) {
+    return reply.code(409).send({
+      error: 'tick has no chat_id — predates TEE attestation rollout',
+      tick: { id: tick.id, ts: tick.ts, tee_verified: tick.tee_verified },
+    });
+  }
+
+  const info = await getProviderInfo();
+  return {
+    tick: {
+      id: tick.id,
+      tokenId: tick.token_id,
+      ts: tick.ts,
+      action: tick.action,
+      sizeBps: tick.size_bps,
+      teeVerified: tick.tee_verified,
+      chatId: tick.chat_id,
+      txHash: tick.tx_hash,
+    },
+    provider: {
+      address: info.provider,
+      url: info.url,
+      model: info.model,
+      verifiability: info.verifiability,
+      teeSignerAddress: info.teeSignerAddress,
+      teeSignerAcknowledged: info.teeSignerAcknowledged,
+    },
+    inferenceContract: '0xa79F4c8311FF93C06b8CfB403690cc987c93F91E',
+    ledgerContract: '0xE70830508dAc0A97e6c087c75f402f9Be669E406',
+    explorer: 'https://chainscan-galileo.0g.ai',
+    chatSignatureUrl: chatSignatureUrl(info.url, tick.chat_id),
+    raReportUrl: raReportUrl(info.url),
+  };
+});
+
+// Create a fresh manager+3-children tree for a buyer. The actual mint logic
+// lives in runtime/scripts/createTree.ts because it has the operator
+// PRIVATE_KEY and the chain client already wired. We invoke it as a child
+// process and capture the trailing `RESULT=<json>` line.
+app.post('/api/create-tree', async (req: any, reply: any) => {
+  const { owner, pubkey } = req.body as { owner?: string; pubkey?: string };
+  if (!owner || !/^0x[0-9a-fA-F]{40}$/.test(owner)) {
+    return reply.code(400).send({ error: 'owner must be 0x-prefixed 20-byte address' });
+  }
+  const cleanPub = (pubkey || '').replace(/^0x/, '');
+  if (!/^04[0-9a-fA-F]{128}$/.test(cleanPub)) {
+    return reply.code(400).send({ error: 'pubkey must be uncompressed secp256k1 (130 hex starting with 04)' });
+  }
+
+  const result = await new Promise<{ ok: true; data: any } | { ok: false; err: string }>((resolve) => {
+    const child = spawn(
+      'pnpm',
+      ['tsx', 'scripts/createTree.ts', '--owner', owner, '--pubkey', '0x' + cleanPub],
+      { cwd: RUNTIME_DIR, env: { ...process.env } },
+    );
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (b) => { stdout += b.toString(); });
+    child.stderr.on('data', (b) => { stderr += b.toString(); app.log.info({ tag: 'createTree' }, b.toString().trim()); });
+    const killer = setTimeout(() => {
+      child.kill('SIGKILL');
+      resolve({ ok: false, err: 'createTree timed out after 180s' });
+    }, 180_000);
+    child.on('close', (code) => {
+      clearTimeout(killer);
+      if (code !== 0) {
+        resolve({ ok: false, err: stderr.trim().split('\n').slice(-5).join(' | ') || `exit ${code}` });
+        return;
+      }
+      const line = stdout.split('\n').reverse().find((l) => l.startsWith('RESULT='));
+      if (!line) {
+        resolve({ ok: false, err: 'createTree produced no RESULT= line' });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(line.slice('RESULT='.length));
+        resolve({ ok: true, data: parsed });
+      } catch (e: any) {
+        resolve({ ok: false, err: 'failed to parse RESULT: ' + (e?.message ?? 'unknown') });
+      }
+    });
+  });
+
+  if (!result.ok) return reply.code(500).send({ error: result.err });
+  return result.data;
 });
 
 app.get('/api/agent/:id/equity', async (req: any) => {

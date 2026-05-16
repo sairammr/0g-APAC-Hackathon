@@ -6,6 +6,7 @@ import { mapManager, mapWorker, buildEquitySeries, shortAddr, type DesignAgent }
 import { Eyebrow, Corner, Chip, Button, PnlDisplay, KV, Stat, Footer } from '@/components/design/primitives';
 import { EquityChart } from '@/components/design/charts';
 import { addrUrl, txUrl, storageUrl, short } from '@/lib/explorer';
+import { AttestationModal } from '@/components/design/AttestationModal';
 
 export default function AgentPage() {
   const params = useParams();
@@ -15,6 +16,7 @@ export default function AgentPage() {
   const [agentRaw, setAgentRaw] = useState<any | null>(null);
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [ticks, setTicks] = useState<any[]>([]);
+  const [attestTickId, setAttestTickId] = useState<number | null>(null);
   const [equity, setEquity] = useState<any[]>([]);
   const [siblings, setSiblings] = useState<DesignAgent[]>([]);
 
@@ -242,8 +244,13 @@ export default function AgentPage() {
                 ticks.slice(0, 22).map((t, i) => {
                   const tu = txUrl(t.tx_hash);
                   const tone = t.tee_verified === true ? 'ok' : t.tee_verified === false ? 'fail' : 'warn';
+                  const clickable = !!t.chat_id;
                   return (
-                    <tr key={i}>
+                    <tr
+                      key={i}
+                      onClick={() => clickable && setAttestTickId(t.id)}
+                      style={{ cursor: clickable ? 'pointer' : 'default' }}
+                    >
                       <td className="mono">
                         {new Date(Number(t.ts) * 1000).toLocaleTimeString('en-US', { hour12: false })}
                       </td>
@@ -252,11 +259,19 @@ export default function AgentPage() {
                         {t.size_bps != null ? `${(Number(t.size_bps) / 100).toFixed(1)}%` : '—'}
                       </td>
                       <td>
-                        <Chip tone={tone}>{t.tee_verified === true ? '✓' : t.tee_verified === false ? '!' : '—'}</Chip>
+                        <Chip tone={tone}>
+                          {t.tee_verified === true ? '✓ verified' : t.tee_verified === false ? '! invalid' : '— unsigned'}
+                        </Chip>
                       </td>
                       <td className="mono">
                         {tu ? (
-                          <a className="link" href={tu} target="_blank" rel="noreferrer">
+                          <a
+                            className="link"
+                            href={tu}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             {short(t.tx_hash)}
                           </a>
                         ) : (
@@ -331,6 +346,10 @@ export default function AgentPage() {
       </div>
 
       <Footer />
+
+      {attestTickId != null && (
+        <AttestationModal tickId={attestTickId} onClose={() => setAttestTickId(null)} />
+      )}
     </div>
   );
 }

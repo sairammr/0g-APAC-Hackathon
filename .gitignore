@@ -46,3 +46,11 @@ logs/
 
 # Session backups
 2026-*-this-session-is-being-continued-*.txt
+
+# Agent / Claude local state (not product code)
+.agents/
+.claude/
+runtime/scratch/
+skills-lock.json
+CLAUDE.md
+Hackathon.md

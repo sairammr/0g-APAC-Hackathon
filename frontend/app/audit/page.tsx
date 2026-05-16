@@ -18,6 +18,7 @@ type SnapRow = {
   prev_brain_root: string | null;
   curr_brain_root: string | null;
   submit_tx_hash: string | null;
+  blob_json: any | null;
 };
 
 type Row = SnapRow & { agent: DesignAgent };
@@ -96,8 +97,13 @@ export default function AuditPage() {
   );
 
   const totalSnaps = rows.length;
+  // A snapshot is "verified" only when the indexer has actually fetched the
+  // blob from 0G Storage (blob_json present) AND the brain lineage links are
+  // intact. The on-chain anchor alone is not enough — on Galileo the storage
+  // SDK currently falls back to a process-local stub that no public node can
+  // serve, so the root is real but the blob is unreachable.
   const verifiedSnaps = rows.filter(
-    (r) => !!r.storage_root && !!r.curr_brain_root && !!r.prev_brain_root
+    (r) => !!r.blob_json && !!r.curr_brain_root && !!r.prev_brain_root
   ).length;
   const continuity = totalSnaps > 0 ? Math.round((verifiedSnaps / totalSnaps) * 100) : 0;
 
@@ -183,7 +189,7 @@ export default function AuditPage() {
                 visible.map((s) => {
                   const bps = pnlBpsFromWei(s.realized_pnl, s.agent.aum);
                   const verified =
-                    !!s.storage_root && !!s.curr_brain_root && !!s.prev_brain_root;
+                    !!s.blob_json && !!s.curr_brain_root && !!s.prev_brain_root;
                   const accentTone =
                     s.agent.accent === 'ink' ? 'ink' : (s.agent.accent as 'tint-1' | 'tint-2' | 'tint-3');
                   return (

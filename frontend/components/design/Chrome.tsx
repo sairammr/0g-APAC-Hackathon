@@ -3,14 +3,28 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Mark } from './Mark';
 import { UrlBar } from './primitives';
+import { WalletConnect } from './WalletConnect';
+import { getDemoState } from '@/lib/api';
 
-const LIVE_ROUTES = ['/demo', '/audit', '/pitch'];
+const LIVE_ROUTES = ['/demo', '/audit', '/pitch', '/create'];
 
 export function Chrome() {
   const router = useRouter();
   const path = usePathname() || '/';
   const live = LIVE_ROUTES.some((r) => path.startsWith(r)) || path.startsWith('/agent/');
   const [dark, setDark] = useState(false);
+  const [managerId, setManagerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await getDemoState();
+        if (!cancelled && s?.manager?.token_id) setManagerId(String(s.manager.token_id));
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem('inft2-theme') : null;
@@ -36,12 +50,14 @@ export function Chrome() {
         <UrlBar path={path} live={live} />
         <div className="chrome-right">
           <button className="ghost-btn" onClick={() => router.push('/demo')}>Demo</button>
-          <button className="ghost-btn" onClick={() => router.push('/agent/2')}>Agents</button>
+          <button className="ghost-btn" onClick={() => router.push(managerId ? `/agent/${managerId}` : '/demo')}>Agents</button>
           <button className="ghost-btn" onClick={() => router.push('/audit')}>Audit</button>
+          <button className="ghost-btn" onClick={() => router.push('/create')}>Create</button>
           <button className="ghost-btn" onClick={() => router.push('/pitch')}>Pitch</button>
           <button className="icon-btn square" onClick={toggleDark} title="Toggle theme">
             {dark ? '☾' : '☀'}
           </button>
+          <WalletConnect />
         </div>
       </div>
     </div>

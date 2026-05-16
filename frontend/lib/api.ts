@@ -13,3 +13,11 @@ export const getEquity = (id: number | string) =>
   fetch(`${BASE}/api/agent/${id}/equity`, { cache: 'no-store' }).then(r => r.json());
 export const getContracts = () =>
   fetch(`${BASE}/api/contracts`, { cache: 'no-store' }).then(r => r.json());
+export const getAttestation = (tickId: number | string) =>
+  fetch(`${BASE}/api/attestation/${tickId}`, { cache: 'no-store' }).then(r => r.json());
+export const createTree = (owner: string, pubkey: string) =>
+  fetch(`${BASE}/api/create-tree`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ owner, pubkey }),
+  }).then(r => r.json());

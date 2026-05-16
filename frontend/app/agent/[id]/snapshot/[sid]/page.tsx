@@ -89,7 +89,13 @@ export default function SnapshotPage() {
     ? Math.round(JSON.stringify(snap.blob_json).length / 1024)
     : null;
 
-  const storageHref = storageUrl(snap.storage_root);
+  // We only render a live storagescan link when the indexer has actually
+  // fetched the blob (blob_json != null). On Galileo today the runtime
+  // falls back to a keccak256 in-memory stub when the 0G Storage SDK
+  // selector mismatches, so the on-chain root is valid hex but the public
+  // storage node 404s. Don't promise a download we can't deliver.
+  const blobRetrievable = snap.blob_json != null;
+  const storageHref = blobRetrievable ? storageUrl(snap.storage_root) : null;
   const txHref = txUrl(snap.submit_tx_hash);
 
   const sorted = [...snaps].sort((a, b) => Number(a.ts) - Number(b.ts));
@@ -97,10 +103,11 @@ export default function SnapshotPage() {
   const prevSnap = idx > 0 ? sorted[idx - 1] : null;
 
   const checks: Array<[string, boolean]> = [
-    ['storage_root present', !!snap.storage_root && snap.storage_root !== '0xstub'],
+    ['storage_root anchored on-chain', !!snap.storage_root && snap.storage_root !== '0xstub'],
     ['curr_brain_root chained from prev', !!snap.curr_brain_root && !!snap.prev_brain_root],
     ['DA epoch recorded', !!snap.da_epoch],
     ['submit_tx anchored on-chain', !!txHref],
+    ['blob retrievable from 0G Storage', blobRetrievable],
   ];
   const passed = checks.filter(([, ok]) => ok).length;
   const pctVerified = Math.round((passed / checks.length) * 100);
@@ -234,7 +241,7 @@ export default function SnapshotPage() {
                 <span className="arrow">→</span>
               </a>
             ) : (
-              <Button disabled>Blob unavailable</Button>
+              <Button disabled>Blob not retrievable (Galileo SDK stub)</Button>
             )}
             <Button arrow={false} onClick={() => router.push('/audit')}>Open audit log</Button>
           </div>
@@ -336,7 +343,7 @@ export default function SnapshotPage() {
           >{`> blob = storage.get("${short(snap.storage_root, 14, 6)}")
 > root = keccak256(blob)
 > root == on-chain.storage_root
-  ${snap.storage_root ? 'PASS' : 'PENDING'}`}</pre>
+  ${blobRetrievable ? 'PASS' : 'PENDING (blob not yet fetched)'}`}</pre>
         </div>
       </div>
 

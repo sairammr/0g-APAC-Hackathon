@@ -5,6 +5,7 @@ import { getDemoState, getContracts } from '@/lib/api';
 import { mapManager, mapWorker, aggregate, type DesignAgent } from '@/lib/adapter';
 import { Eyebrow, Corner, Button, PnlDisplay, Stat, KV, Marquee, Footer } from '@/components/design/primitives';
 import { RecursionTree } from '@/components/design/RecursionTree';
+import { ArchitectureDiagram, IntentFlowDiagram, ReKeyDiagram } from '@/components/design/Diagrams';
 import { addrUrl, short } from '@/lib/explorer';
 
 export default function LandingPage() {
@@ -216,11 +217,44 @@ export default function LandingPage() {
       ) : null}
 
       <div className="bento">
+        <div className="cell span-12" style={{ padding: '40px 40px 32px' }}>
+          <Eyebrow dot>System map</Eyebrow>
+          <h2 className="editorial cursive" style={{ margin: '16px 0 8px', maxWidth: '24ch' }}>
+            Four layers. Every box runs on 0G.
+          </h2>
+          <p className="body" style={{ maxWidth: '60ch', marginBottom: 24 }}>
+            Frontend reads from a backend that indexes chain + storage. A single runtime loop is
+            the only writer — it decides in a TEE, signs as the owner, and lets the contract
+            enforce policy.
+          </p>
+          <ArchitectureDiagram chainId={contracts?.chainId ?? 16602} />
+        </div>
+      </div>
+
+      <div className="bento">
+        <div className="cell span-12" style={{ padding: '40px 40px 32px' }}>
+          <Eyebrow dot>Per-tick path</Eyebrow>
+          <h2 className="editorial cursive" style={{ margin: '16px 0 8px', maxWidth: '22ch' }}>
+            Owner signs. Operator relays. Contract enforces.
+          </h2>
+          <p className="body" style={{ maxWidth: '60ch', marginBottom: 24 }}>
+            Every 60 seconds a child agent observes the market, asks GLM-5 in TEE, signs an
+            EIP-712 intent, and the operator relays it. The contract checks nonce, expiry,
+            target, value cap, daily cap — then the TBA executes.
+          </p>
+          <IntentFlowDiagram />
+        </div>
+      </div>
+
+      <div className="bento">
         <div className="cell span-12 ink" style={{ padding: 40 }}>
           <Eyebrow style={{ color: 'rgba(236,238,233,.65)' }}>What happens on sale</Eyebrow>
           <h2 className="display-m cursive" style={{ margin: '16px 0 28px', color: 'var(--bg)', maxWidth: '18ch' }}>
             transferWithReKey&nbsp;&mdash;&nbsp;<span style={{ color: 'var(--c-1)' }}>atomic</span>.
           </h2>
+          <div style={{ color: 'var(--bg)', marginBottom: 36 }}>
+            <ReKeyDiagram />
+          </div>
           <div
             style={{
               display: 'grid',
