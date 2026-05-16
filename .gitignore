@@ -1,0 +1,48 @@
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+CREDS.TXT
+creds.txt
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/*/dry-run/
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+
+# TypeScript build
+*.tsbuildinfo
+dist/
+build/
+
+# Next.js
+.next/
+out/
+.vercel/
+
+# Runtime / local data
+*.db
+*.db-journal
+runtime/runtime.db
+runtime/coverage/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Session backups
+2026-*-this-session-is-being-continued-*.txt

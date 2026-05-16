@@ -84,6 +84,41 @@ app.get('/api/agent/:id/snapshots', async (req: any) => {
   return data ?? [];
 });
 
+app.get('/api/agent/:id/ticks', async (req: any) => {
+  const id = req.params.id as string;
+  const { data } = await supabase()
+    .from('ticks')
+    .select('*')
+    .eq('token_id', id)
+    .order('ts', { ascending: false })
+    .limit(50);
+  return data ?? [];
+});
+
+app.get('/api/agent/:id/equity', async (req: any) => {
+  const id = req.params.id as string;
+  const { data } = await supabase()
+    .from('equity')
+    .select('ts, value')
+    .eq('token_id', id)
+    .order('ts', { ascending: true })
+    .limit(500);
+  return data ?? [];
+});
+
+app.get('/api/contracts', async () => {
+  return {
+    chainId: deployments.chainId,
+    rpc: deployments.rpc,
+    iNFT2: deployments.iNFT2,
+    AgentController: deployments.AgentController,
+    SnapshotAttestor: deployments.SnapshotAttestor,
+    BrainKeyRegistry: deployments.BrainKeyRegistry,
+    ERC6551Registry: deployments.ERC6551Registry,
+    ERC6551Account: deployments.ERC6551Account,
+  };
+});
+
 // Buy flow: queue a re-keyed transfer for the runtime to execute.
 // The buyer's uncompressed secp256k1 pubkey is stashed in `new_brain_root`
 // during the pending state — the runtime overwrites it with the actual

@@ -171,6 +171,7 @@ async function onSnapshot(log: any) {
     sharpe_e6: Number(sharpeE6),
     da_epoch: daEpoch.toString(),
     da_verified: false,
+    submit_tx_hash: log.transactionHash,
   });
 }
 
