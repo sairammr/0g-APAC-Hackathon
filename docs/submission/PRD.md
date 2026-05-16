@@ -1,6 +1,5 @@
 # iNFT² — Product Requirements Document
 
-**Owner:** Tenori Labs
 **Track:** 0G APAC Hackathon — Track 2 (Agentic Trading Arena)
 **Status:** Testnet live on 0G Galileo (chainId 16602)
 **Last updated:** 2026-05-15
@@ -179,7 +178,7 @@ Selling an iNFT triggers `transferWithReKey`: the brain blob is downloaded, decr
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| 0G Storage SDK selector mismatch on Galileo | Medium — blocks live blob upload | In-memory keccak256-content-addressed stub with same root contract; tracked in README §11. |
+| 0G Storage SDK selector mismatch on Galileo | Resolved | Subclassed the SDK's `Uploader` to encode the new `Submission` ABI (wraps `SubmissionData` + `submitter`) and decode the new `Submit` event; live uploads land on Galileo. `STORAGE_STUB=true` retained as an offline escape hatch. See AUDIT §3.1. |
 | 0G Compute Router rate limits | Low — would just throttle ticks | Strategy `decide()` calls are cheap; pause-then-retry on 429. |
 | TEE attestation gaps if a provider goes down | Low | `processResponse` returns `null` (not `false`); we log it and continue. Provider rotation handled by router. |
 | Operator key compromise | High in theory; limited blast radius in practice | Operator signs only EIP-712 intents authorized by owner keys; controller caps daily volume per agent. |

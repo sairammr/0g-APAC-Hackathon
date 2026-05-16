@@ -167,10 +167,15 @@ app.post('/api/create-tree', async (req: any, reply: any) => {
     let stderr = '';
     child.stdout.on('data', (b) => { stdout += b.toString(); });
     child.stderr.on('data', (b) => { stderr += b.toString(); app.log.info({ tag: 'createTree' }, b.toString().trim()); });
+    // 4 agents × 4 sequential writes each = 16 txs on Galileo. Typical run is
+    // 40–90s but RPC index lag can push it past 3 min. Keep a generous ceiling
+    // so we don't kill a still-progressing mint; the per-tx waitReceipt inside
+    // createTree.ts caps each tx so we still bail on a genuinely stuck tx.
+    const CREATE_TREE_TIMEOUT_MS = Number(process.env.CREATE_TREE_TIMEOUT_MS ?? 600_000);
     const killer = setTimeout(() => {
       child.kill('SIGKILL');
-      resolve({ ok: false, err: 'createTree timed out after 180s' });
-    }, 180_000);
+      resolve({ ok: false, err: `createTree timed out after ${CREATE_TREE_TIMEOUT_MS / 1000}s` });
+    }, CREATE_TREE_TIMEOUT_MS);
     child.on('close', (code) => {
       clearTimeout(killer);
       if (code !== 0) {

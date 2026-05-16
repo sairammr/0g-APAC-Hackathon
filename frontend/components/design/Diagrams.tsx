@@ -458,3 +458,384 @@ export function TrustModelDiagram({ style }: { style?: CSSProperties }) {
     </div>
   );
 }
+
+/* ─────────────── System architecture: contracts + runtime + backend + 0G ─────────────── */
+export function SystemArchitectureDiagram({
+  chainId = 16602,
+  style,
+}: {
+  chainId?: number;
+  style?: CSSProperties;
+}) {
+  const contracts = [
+    { x: 30, w: 158, name: 'iNFT2', tag: 'ERC-7857' },
+    { x: 198, w: 158, name: 'AgentController', tag: 'EIP-712' },
+    { x: 366, w: 158, name: 'SnapshotAttestor', tag: 'lineage' },
+    { x: 534, w: 158, name: 'BrainKeyRegistry', tag: 're-key' },
+    { x: 702, w: 178, name: 'ERC6551 Reg + Acct', tag: 'TBA' },
+  ];
+
+  return (
+    <div style={style}>
+      <svg viewBox="0 0 1100 560" style={{ width: '100%', height: 'auto', display: 'block', color: 'var(--ink)' }}>
+        {/* ── Top band: 0G Chain (contracts) ── */}
+        <g>
+          <rect x="20" y="20" width="870" height="110" fill="var(--c-1)" stroke={STROKE} />
+          <text x="40" y="44" fontFamily={FONT_MONO} fontSize="11" fill="#0B0C0A" letterSpacing="1.4">
+            0G CHAIN · chainId {chainId} · 5 contracts deployed + verified
+          </text>
+          {contracts.map((c, i) => (
+            <g key={i}>
+              <rect x={c.x} y="58" width={c.w} height="58" fill="var(--bg)" stroke={STROKE} strokeOpacity="0.5" />
+              <text
+                x={c.x + c.w / 2}
+                y="82"
+                textAnchor="middle"
+                fontFamily={FONT_DISPLAY}
+                fontSize="13.5"
+                fill="var(--ink)"
+              >
+                {c.name}
+              </text>
+              <text
+                x={c.x + c.w / 2}
+                y="100"
+                textAnchor="middle"
+                fontFamily={FONT_MONO}
+                fontSize="10"
+                fill="var(--ink-3)"
+                letterSpacing="1.2"
+              >
+                {c.tag.toUpperCase()}
+              </text>
+            </g>
+          ))}
+        </g>
+
+        {/* ── Runtime ↔ Chain arrows ── */}
+        <g stroke={STROKE} strokeOpacity="0.55" fill="none">
+          {/* writes intents (up) */}
+          <line x1="265" y1="190" x2="265" y2="132" />
+          <polygon points="261,140 269,140 265,132" fill={STROKE} fillOpacity="0.6" />
+          <text x="276" y="160" fontFamily={FONT_MONO} fontSize="9.5" fill="var(--ink-3)" letterSpacing="0.6">
+            writes · EIP-712 intent · per tick
+          </text>
+          {/* commits root (up) */}
+          <line x1="500" y1="190" x2="500" y2="132" strokeDasharray="3 4" />
+          <polygon points="496,140 504,140 500,132" fill={STROKE} fillOpacity="0.6" />
+          <text x="512" y="160" fontFamily={FONT_MONO} fontSize="9.5" fill="var(--ink-3)" letterSpacing="0.6">
+            commits Merkle root · 6h
+          </text>
+        </g>
+
+        {/* ── Middle: Runtime loop ── */}
+        <g>
+          <rect x="20" y="190" width="870" height="160" fill="var(--bg)" stroke={STROKE} />
+          <text x="40" y="214" fontFamily={FONT_MONO} fontSize="11" fill="var(--ink-3)" letterSpacing="1.4">
+            RUNTIME LOOP · runtime/src/main.ts · 60s tick · 6h snapshot
+          </text>
+
+          {/* Pipeline boxes inside runtime band */}
+          {[
+            { x: 36, label: 'observe', sub: 'market read · 60s', accent: 'var(--bg-2)' },
+            { x: 200, label: 'TEE decide', sub: 'GLM-5-FP8 · verify_tee', accent: 'var(--c-1)' },
+            { x: 364, label: 'owner sign', sub: 'EIP-712 · nonce · cap', accent: 'var(--bg-2)' },
+            { x: 528, label: 'operator relay', sub: 'AgentController.execute', accent: 'var(--bg-2)' },
+            { x: 692, label: 'TBA execute', sub: 'allowlist · target', accent: 'var(--c-2)' },
+          ].map((p, i, arr) => (
+            <g key={i}>
+              <rect x={p.x} y="240" width="140" height="60" fill={p.accent} stroke={STROKE} strokeOpacity="0.5" />
+              <text x={p.x + 70} y="266" textAnchor="middle" fontFamily={FONT_DISPLAY} fontSize="13" fill="#0B0C0A">
+                {p.label}
+              </text>
+              <text
+                x={p.x + 70}
+                y="284"
+                textAnchor="middle"
+                fontFamily={FONT_MONO}
+                fontSize="9.5"
+                fill="#0B0C0A"
+                opacity="0.7"
+              >
+                {p.sub}
+              </text>
+              {i < arr.length - 1 && (
+                <g>
+                  <line
+                    x1={p.x + 140}
+                    y1="270"
+                    x2={p.x + 158}
+                    y2="270"
+                    stroke={STROKE}
+                    strokeOpacity="0.55"
+                  />
+                  <polygon points={`${p.x + 152},266 ${p.x + 152},274 ${p.x + 158},270`} fill={STROKE} fillOpacity="0.55" />
+                </g>
+              )}
+            </g>
+          ))}
+
+          {/* Snapshot leg label inside runtime */}
+          <text x="40" y="328" fontFamily={FONT_MONO} fontSize="10" fill="var(--ink-3)">
+            every 6h →  serialize state · ECIES encrypt to owner · upload blob · read DA epoch · SnapshotAttestor.submit
+          </text>
+        </g>
+
+        {/* ── Right column: 0G primitives ── */}
+        <g>
+          {[
+            { y: 20, label: '0G COMPUTE', detail: 'TEE inference', sub: 'GLM-5-FP8 · processResponse' },
+            { y: 130, label: '0G STORAGE', detail: 'encrypted brain', sub: 'ECIES + AES-256-GCM' },
+            { y: 240, label: '0G DA', detail: 'epoch tag', sub: 'DASigners precompile' },
+          ].map((p, i) => (
+            <g key={i}>
+              <rect x="910" y={p.y} width="170" height="98" fill="var(--ink)" />
+              <text x="924" y={p.y + 26} fontFamily={FONT_MONO} fontSize="10.5" fill="var(--bg)" opacity="0.75" letterSpacing="1.3">
+                {p.label}
+              </text>
+              <text x="924" y={p.y + 52} fontFamily={FONT_DISPLAY} fontSize="14" fill="var(--bg)">
+                {p.detail}
+              </text>
+              <text x="924" y={p.y + 76} fontFamily={FONT_MONO} fontSize="10" fill="var(--bg)" opacity="0.62">
+                {p.sub}
+              </text>
+            </g>
+          ))}
+        </g>
+
+        {/* ── Arrows: Runtime → right column 0G primitives ── */}
+        <g stroke={STROKE} strokeOpacity="0.55" fill="none">
+          {/* to 0G Compute (decide) */}
+          <line x1="800" y1="270" x2="910" y2="70" />
+          <polygon points="906,62 914,72 902,72" fill={STROKE} fillOpacity="0.55" />
+          <text x="820" y="142" fontFamily={FONT_MONO} fontSize="9.5" fill="var(--ink-3)" transform="rotate(-22 820 142)">
+            verify_tee
+          </text>
+
+          {/* to 0G Storage (snapshot) */}
+          <line x1="800" y1="328" x2="910" y2="180" strokeDasharray="3 4" />
+          <polygon points="906,172 914,182 902,182" fill={STROKE} fillOpacity="0.55" />
+          <text x="824" y="246" fontFamily={FONT_MONO} fontSize="9.5" fill="var(--ink-3)" transform="rotate(-18 824 246)">
+            blob upload
+          </text>
+
+          {/* to 0G DA (snapshot epoch) */}
+          <line x1="800" y1="338" x2="910" y2="288" strokeDasharray="3 4" />
+          <polygon points="906,280 914,290 902,290" fill={STROKE} fillOpacity="0.55" />
+          <text x="836" y="316" fontFamily={FONT_MONO} fontSize="9.5" fill="var(--ink-3)" transform="rotate(-12 836 316)">
+            epoch read
+          </text>
+        </g>
+
+        {/* ── Bottom: Backend band ── */}
+        <g stroke={STROKE} strokeOpacity="0.55" fill="none">
+          <line x1="100" y1="350" x2="100" y2="410" strokeDasharray="3 4" />
+          <polygon points="96,402 104,402 100,410" fill={STROKE} fillOpacity="0.55" />
+          <text x="110" y="380" fontFamily={FONT_MONO} fontSize="9.5" fill="var(--ink-3)">
+            event watch · indexer cursor
+          </text>
+        </g>
+
+        <g>
+          <rect x="20" y="410" width="870" height="130" fill="var(--bg-2)" stroke={STROKE} />
+          <text x="40" y="434" fontFamily={FONT_MONO} fontSize="11" fill="var(--ink-3)" letterSpacing="1.4">
+            BACKEND · Fastify + Supabase ledger
+          </text>
+
+          {[
+            { x: 36, label: 'REST api', sub: '/api/demo-state · /api/agent/:id · /api/snapshot/:id' },
+            { x: 250, label: 'chain indexer', sub: 'viem watchEvent · iNFT2 + SnapshotAttestor + AgentController' },
+            { x: 510, label: 'snapshot fetcher', sub: 'pulls blob JSON · writes da_verified' },
+            { x: 730, label: 'Supabase', sub: 'agents · ticks · snapshots · transfers' },
+          ].map((b, i) => (
+            <g key={i}>
+              <rect x={b.x} y="450" width={i === 0 ? 200 : i === 1 ? 240 : i === 2 ? 200 : 144} height="70" fill="var(--bg)" stroke={STROKE} strokeOpacity="0.45" />
+              <text x={b.x + 12} y="474" fontFamily={FONT_DISPLAY} fontSize="13.5" fill="var(--ink)">
+                {b.label}
+              </text>
+              <text x={b.x + 12} y="494" fontFamily={FONT_MONO} fontSize="9.5" fill="var(--ink-3)">
+                {b.sub}
+              </text>
+              <text x={b.x + 12} y="510" fontFamily={FONT_MONO} fontSize="9" fill="var(--ink-3)" opacity="0.7">
+                backend/src/{i === 0 ? 'main.ts' : i === 1 ? 'indexer/chain.ts' : i === 2 ? 'indexer/snapshots.ts' : 'db.ts'}
+              </text>
+            </g>
+          ))}
+        </g>
+
+        {/* Backend → 0G Storage arrow (blob fetch) */}
+        <g stroke={STROKE} strokeOpacity="0.55" fill="none">
+          <path d="M 890 480 C 935 480, 935 230, 910 230" strokeDasharray="3 4" />
+          <polygon points="906,226 914,226 910,218" fill={STROKE} fillOpacity="0.55" />
+          <text x="920" y="404" fontFamily={FONT_MONO} fontSize="9" fill="var(--ink-3)" transform="rotate(-90 920 404)">
+            blob fetch
+          </text>
+        </g>
+      </svg>
+      <Caption>Five contracts · one runtime · four 0G primitives · backend indexes from chain + storage</Caption>
+    </div>
+  );
+}
+
+/* ─────────────── Tick pipeline — 4 phases (Decide / Authorize / Snapshot / Sell) ─────────────── */
+export function TickPipelineDiagram({ style }: { style?: CSSProperties }) {
+  const phases = [
+    {
+      label: 'DECIDE',
+      detail: '0G Compute TEE',
+      sub: 'verify_tee · processResponse',
+      accent: 'var(--bg-2)',
+      ink: 'var(--ink)',
+    },
+    {
+      label: 'AUTHORIZE',
+      detail: 'EIP-712 intent',
+      sub: 'nonce · expiry · per-trade cap · daily cap · allowlist',
+      accent: 'var(--c-1)',
+      ink: '#0B0C0A',
+    },
+    {
+      label: 'SNAPSHOT',
+      detail: '6h cadence',
+      sub: 'ECIES → 0G Storage · DA epoch · SnapshotAttestor.submit',
+      accent: 'var(--c-2)',
+      ink: '#0B0C0A',
+    },
+    {
+      label: 'SELL',
+      detail: 'transferWithReKey',
+      sub: 'fetch → decrypt → re-encrypt → upload → flip ownership · 1 tx',
+      accent: 'var(--ink)',
+      ink: 'var(--bg)',
+    },
+  ];
+
+  return (
+    <div style={style}>
+      <svg viewBox="0 0 1080 200" style={{ width: '100%', height: 'auto', display: 'block', color: 'var(--ink)' }}>
+        <text x="20" y="26" fontFamily={FONT_MONO} fontSize="10.5" fill="var(--ink-3)" letterSpacing="1.4">
+          PER-TICK + LIFETIME PIPELINE · 4 phases · same intent surface
+        </text>
+
+        {/* Spine */}
+        <line x1="20" y1="110" x2="1060" y2="110" stroke={STROKE} strokeOpacity="0.32" strokeDasharray="3 4" />
+
+        {phases.map((p, i) => {
+          const slot = (1040 - 20) / phases.length;
+          const x = 20 + i * slot;
+          return (
+            <g key={i}>
+              {/* phase number circle */}
+              <circle cx={x + 22} cy="60" r="14" fill="var(--bg)" stroke={STROKE} />
+              <text x={x + 22} y="64" textAnchor="middle" fontFamily={FONT_MONO} fontSize="11" fill="var(--ink)">
+                0{i + 1}
+              </text>
+
+              {/* box */}
+              <rect x={x + 12} y="80" width={slot - 24} height="80" fill={p.accent} stroke={STROKE} />
+              <text
+                x={x + 28}
+                y="104"
+                fontFamily={FONT_MONO}
+                fontSize="10.5"
+                fill={p.ink}
+                opacity="0.75"
+                letterSpacing="1.3"
+              >
+                {p.label}
+              </text>
+              <text x={x + 28} y="128" fontFamily={FONT_DISPLAY} fontSize="14" fill={p.ink}>
+                {p.detail}
+              </text>
+              <text x={x + 28} y="148" fontFamily={FONT_MONO} fontSize="9.5" fill={p.ink} opacity="0.7">
+                {p.sub}
+              </text>
+
+              {/* arrow to next */}
+              {i < phases.length - 1 && (
+                <g>
+                  <line x1={x + slot - 8} y1="120" x2={x + slot + 4} y2="120" stroke={STROKE} strokeOpacity="0.6" />
+                  <polygon
+                    points={`${x + slot - 2},116 ${x + slot - 2},124 ${x + slot + 6},120`}
+                    fill={STROKE}
+                    fillOpacity="0.6"
+                  />
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      <Caption>One intent surface for all four phases · same key, same enclave, same audit trail</Caption>
+    </div>
+  );
+}
+
+/* ─────────────── Identity composition (mini visual for title slide) ─────────────── */
+export function IdentityCompositionDiagram({ style }: { style?: CSSProperties }) {
+  return (
+    <div style={style}>
+      <svg viewBox="0 0 360 320" style={{ width: '100%', height: 'auto', display: 'block', color: 'var(--ink)' }}>
+        {/* outer token (iNFT) */}
+        <rect x="20" y="20" width="320" height="280" fill="var(--bg)" stroke={STROKE} strokeWidth="1.5" />
+        <text x="34" y="44" fontFamily={FONT_MONO} fontSize="10.5" fill="var(--ink-3)" letterSpacing="1.3">
+          iNFT · ERC-7857 · ONE TOKEN
+        </text>
+
+        {/* brain */}
+        <rect x="34" y="60" width="140" height="62" fill="var(--c-1)" stroke={STROKE} />
+        <text x="44" y="80" fontFamily={FONT_MONO} fontSize="10" fill="#0B0C0A" opacity="0.7" letterSpacing="1.2">
+          BRAIN
+        </text>
+        <text x="44" y="100" fontFamily={FONT_DISPLAY} fontSize="13" fill="#0B0C0A">
+          encrypted blob
+        </text>
+        <text x="44" y="116" fontFamily={FONT_MONO} fontSize="9.5" fill="#0B0C0A" opacity="0.7">
+          0G Storage
+        </text>
+
+        {/* lineage */}
+        <rect x="186" y="60" width="140" height="62" fill="var(--c-2)" stroke={STROKE} />
+        <text x="196" y="80" fontFamily={FONT_MONO} fontSize="10" fill="#0B0C0A" opacity="0.7" letterSpacing="1.2">
+          LINEAGE
+        </text>
+        <text x="196" y="100" fontFamily={FONT_DISPLAY} fontSize="13" fill="#0B0C0A">
+          prev → curr root
+        </text>
+        <text x="196" y="116" fontFamily={FONT_MONO} fontSize="9.5" fill="#0B0C0A" opacity="0.7">
+          0G DA epoch
+        </text>
+
+        {/* TBA wallet */}
+        <rect x="34" y="140" width="292" height="50" fill="var(--ink)" />
+        <text x="44" y="162" fontFamily={FONT_MONO} fontSize="10" fill="var(--bg)" opacity="0.7" letterSpacing="1.2">
+          WALLET · ERC-6551 TBA · 0xT8A…F1
+        </text>
+        <text x="44" y="180" fontFamily={FONT_MONO} fontSize="10.5" fill="var(--bg)">
+          holds USDC · RISK · and other iNFTs
+        </text>
+
+        {/* nested iNFTs (the squared) */}
+        <text x="34" y="216" fontFamily={FONT_MONO} fontSize="10" fill="var(--ink-3)" letterSpacing="1.2">
+          THE SQUARED · CHILDREN
+        </text>
+        {[
+          { x: 34, label: '#43 Lark' },
+          { x: 134, label: '#44 Tide' },
+          { x: 234, label: '#45 Quill' },
+        ].map((c, i) => (
+          <g key={i}>
+            <rect x={c.x} y="226" width="92" height="60" fill="var(--bg-2)" stroke={STROKE} strokeOpacity="0.5" />
+            <text x={c.x + 46} y="252" textAnchor="middle" fontFamily={FONT_DISPLAY} fontSize="12" fill="var(--ink)">
+              iNFT
+            </text>
+            <text x={c.x + 46} y="270" textAnchor="middle" fontFamily={FONT_MONO} fontSize="9.5" fill="var(--ink-3)">
+              {c.label}
+            </text>
+          </g>
+        ))}
+      </svg>
+      <Caption>One token · brain + lineage + wallet · wallet holds more iNFTs · that’s the squared</Caption>
+    </div>
+  );
+}

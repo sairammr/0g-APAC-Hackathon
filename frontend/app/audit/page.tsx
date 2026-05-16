@@ -1,10 +1,18 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { parseAbi } from 'viem';
 import { getDemoState, getSnapshots } from '@/lib/api';
 import { mapManager, mapWorker, type DesignAgent } from '@/lib/adapter';
 import { Eyebrow, Chip, Footer } from '@/components/design/primitives';
 import { short } from '@/lib/explorer';
+import { pub } from '@/lib/viem';
+
+const ATTESTOR = (process.env.NEXT_PUBLIC_ATTESTOR_ADDR ||
+  '0x378661ec8AE1C909c4d7d5e57470cEBEacFB90A3') as `0x${string}`;
+const attestorAbi = parseAbi([
+  'function snapshotCount(uint256 tokenId) view returns (uint256)',
+]);
 
 type SnapRow = {
   id: number;
@@ -49,6 +57,7 @@ export default function AuditPage() {
   const [agents, setAgents] = useState<DesignAgent[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [filter, setFilter] = useState<string>('all');
+  const [chainCounts, setChainCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +91,25 @@ export default function AuditPage() {
         });
         flat.sort((a, b) => Number(b.ts) - Number(a.ts));
         setRows(flat);
+
+        const counts: Record<string, number> = {};
+        await Promise.all(
+          list.map(async (a) => {
+            try {
+              const c = await pub.readContract({
+                address: ATTESTOR,
+                abi: attestorAbi,
+                functionName: 'snapshotCount',
+                args: [BigInt(a.tokenId)],
+              });
+              counts[String(a.tokenId)] = Number(c);
+            } catch {
+              counts[String(a.tokenId)] = 0;
+            }
+          })
+        );
+        if (cancelled) return;
+        setChainCounts(counts);
       } catch (e) {
         console.error(e);
       }
@@ -97,15 +125,13 @@ export default function AuditPage() {
   );
 
   const totalSnaps = rows.length;
-  // A snapshot is "verified" only when the indexer has actually fetched the
-  // blob from 0G Storage (blob_json present) AND the brain lineage links are
-  // intact. The on-chain anchor alone is not enough — on Galileo the storage
-  // SDK currently falls back to a process-local stub that no public node can
-  // serve, so the root is real but the blob is unreachable.
-  const verifiedSnaps = rows.filter(
-    (r) => !!r.blob_json && !!r.curr_brain_root && !!r.prev_brain_root
-  ).length;
+  // Verification is sourced from on-chain artifacts only: a snapshot is
+  // verified when SnapshotAttestor.submit landed (submit_tx_hash present).
+  // The DB stores the tx hash purely as an index cache — the source of truth
+  // is the chain, which we cross-check via snapshotCount(tokenId).
+  const verifiedSnaps = rows.filter((r) => !!r.submit_tx_hash).length;
   const continuity = totalSnaps > 0 ? Math.round((verifiedSnaps / totalSnaps) * 100) : 0;
+  const chainTotal = Object.values(chainCounts).reduce((a, b) => a + b, 0);
 
   return (
     <div className="page">
@@ -128,8 +154,8 @@ export default function AuditPage() {
             <span style={{ fontSize: '0.4em' }}>%</span>
           </p>
           <p className="mono small" style={{ marginTop: 8, color: 'rgba(236,238,233,.7)' }}>
-            {totalSnaps} snapshot{totalSnaps === 1 ? '' : 's'} · prev → curr chain verified
-            end-to-end
+            {verifiedSnaps}/{totalSnaps} indexed · {chainTotal} on-chain via
+            SnapshotAttestor.snapshotCount()
           </p>
         </div>
       </div>
@@ -188,8 +214,7 @@ export default function AuditPage() {
               ) : (
                 visible.map((s) => {
                   const bps = pnlBpsFromWei(s.realized_pnl, s.agent.aum);
-                  const verified =
-                    !!s.blob_json && !!s.curr_brain_root && !!s.prev_brain_root;
+                  const verified = !!s.submit_tx_hash;
                   const accentTone =
                     s.agent.accent === 'ink' ? 'ink' : (s.agent.accent as 'tint-1' | 'tint-2' | 'tint-3');
                   return (

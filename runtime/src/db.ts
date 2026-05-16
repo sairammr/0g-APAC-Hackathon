@@ -45,6 +45,43 @@ export async function insertTick(row: {
   if (error) throw error;
 }
 
+export async function insertSnapshot(row: {
+  tokenId: bigint;
+  storageRoot: string;
+  prevBrainRoot: string;
+  currBrainRoot: string;
+  realizedPnL: bigint;
+  sharpeE6: number;
+  daEpoch: bigint;
+  txHash?: string | null;
+}) {
+  const { error } = await db().from('snapshots').upsert({
+    token_id: row.tokenId.toString(),
+    ts: Math.floor(Date.now() / 1000),
+    storage_root: row.storageRoot,
+    realized_pnl: row.realizedPnL.toString(),
+    sharpe_e6: row.sharpeE6,
+    da_epoch: row.daEpoch.toString(),
+    da_verified: !!row.txHash,
+    prev_brain_root: row.prevBrainRoot,
+    curr_brain_root: row.currBrainRoot,
+    submit_tx_hash: row.txHash ?? null,
+  }, { onConflict: 'token_id,storage_root' });
+  if (error) throw error;
+}
+
+export async function getLatestBrainRoot(tokenId: bigint): Promise<string | null> {
+  const { data, error } = await db()
+    .from('snapshots')
+    .select('curr_brain_root')
+    .eq('token_id', tokenId.toString())
+    .order('ts', { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const row = (data ?? [])[0];
+  return row?.curr_brain_root ?? null;
+}
+
 export async function equitySeries(tokenId: bigint): Promise<bigint[]> {
   const { data, error } = await db()
     .from('equity')

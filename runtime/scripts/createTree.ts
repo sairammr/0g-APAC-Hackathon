@@ -19,6 +19,32 @@ import { uploadBytes } from '../src/storage.js';
 import { encryptToPubkey } from '../src/brainKey.js';
 import { db } from '../src/db.js';
 
+// Galileo RPC sometimes hands us a tx hash before the node we poll has it
+// indexed. waitForTransactionReceipt then throws TransactionReceiptNotFoundError.
+// Poll for up to PER_TX_TIMEOUT_MS, sleeping POLL_INTERVAL_MS between attempts,
+// treating "not found" as "keep waiting" rather than fatal. Sub-second finality
+// on Galileo means ~3-15s typical; the ceiling is a circuit-breaker, not the
+// expected case. With 16 sequential txs in this script, keep per-tx cap modest
+// (90s) so a single stuck tx doesn't run the whole script past the backend's
+// SIGKILL deadline.
+const PER_TX_TIMEOUT_MS = Number(process.env.WAIT_RECEIPT_TIMEOUT_MS ?? 90_000);
+const POLL_INTERVAL_MS = Number(process.env.WAIT_RECEIPT_POLL_MS ?? 1_500);
+async function waitReceipt(hash: `0x${string}`): Promise<void> {
+  const deadline = Date.now() + PER_TX_TIMEOUT_MS;
+  let lastErr: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const r = await pub.getTransactionReceipt({ hash });
+      if (r) return;
+    } catch (e: any) {
+      lastErr = e;
+      if (e?.name && e.name !== 'TransactionReceiptNotFoundError') throw e;
+    }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
+  throw lastErr ?? new Error(`receipt for ${hash} not found within ${PER_TX_TIMEOUT_MS}ms`);
+}
+
 type Spec = { role: string; brainTag: string; uri: string };
 
 const SPECS: Spec[] = [
@@ -42,13 +68,18 @@ function parseArgs(argv: string[]): Args {
   return out;
 }
 
-async function mintOne(spec: Spec, owner: `0x${string}`, pubkeyBytes: Buffer): Promise<{
+async function mintOne(spec: Spec, requestedOwner: `0x${string}`, pubkeyBytes: Buffer): Promise<{
   id: string; role: string; wallet: string; brainRoot: string; mintTx: string;
 }> {
+  // The operator must own the freshly-minted token so it can call setOperator
+  // and setPolicy on AgentController (both gated on `ownerOf(id) == msg.sender`).
+  // The buyer (requestedOwner) is recorded in the brain blob + Supabase row;
+  // they take real custody later via transferWithReKey.
   const brainPlaintext = Buffer.from(JSON.stringify({
     role: spec.role,
     brainTag: spec.brainTag,
     createdAt: Date.now(),
+    requestedOwner,
   }));
   const encrypted = encryptToPubkey(pubkeyBytes, brainPlaintext);
   const { root: brainRoot } = await uploadBytes(encrypted);
@@ -57,9 +88,9 @@ async function mintOne(spec: Spec, owner: `0x${string}`, pubkeyBytes: Buffer): P
     address: addr.iNFT2,
     abi: abis.inft,
     functionName: 'mint',
-    args: [owner, brainRoot, spec.uri, ('0x' + pubkeyBytes.toString('hex')) as `0x${string}`],
+    args: [account.address, brainRoot, spec.uri, ('0x' + pubkeyBytes.toString('hex')) as `0x${string}`],
   });
-  await pub.waitForTransactionReceipt({ hash: mintTx });
+  await waitReceipt(mintTx);
 
   const nextId = await pub.readContract({
     address: addr.iNFT2, abi: abis.inft, functionName: 'nextId', args: [],
@@ -73,21 +104,24 @@ async function mintOne(spec: Spec, owner: `0x${string}`, pubkeyBytes: Buffer): P
 
   // Create the ERC-6551 wallet (best-effort: idempotent on the contract side).
   try {
-    await wallet.writeContract({
+    const createTx = await wallet.writeContract({
       address: addr.ERC6551Registry, abi: abis.registry,
       functionName: 'createAccount',
       args: [addr.ERC6551Account, ('0x' + '00'.repeat(32)) as `0x${string}`, 16602n, addr.iNFT2, tokenId],
     });
+    await waitReceipt(createTx);
   } catch {
     // already exists — fine
   }
 
   // Operator + policy so the runtime can drive this agent.
-  await wallet.writeContract({
+  const opTx = await wallet.writeContract({
     address: addr.AgentController, abi: abis.ctrl,
     functionName: 'setOperator', args: [tokenId, account.address],
   });
-  await wallet.writeContract({
+  await waitReceipt(opTx);
+
+  const polTx = await wallet.writeContract({
     address: addr.AgentController, abi: abis.ctrl,
     functionName: 'setPolicy',
     args: [tokenId, {
@@ -97,17 +131,20 @@ async function mintOne(spec: Spec, owner: `0x${string}`, pubkeyBytes: Buffer): P
       snapshotMaxAge: 0n,
     }],
   });
+  await waitReceipt(polTx);
 
-  // Mirror into Supabase so the UI sees the new tree immediately.
+  // Mirror into Supabase so the UI sees the new tree immediately. The chain
+  // owner is the operator; the buyer (requestedOwner) is mirrored in metadata
+  // so the UI can render "this tree belongs to X" until re-key transfer.
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       await db().from('agents').upsert({
         token_id: tokenId.toString(),
-        owner,
+        owner: requestedOwner,
         role: spec.role === 'manager' ? 'manager' : 'trader',
         brain_root: brainRoot,
         brain_uri: spec.uri,
-        metadata: { wallet: tbaWallet, strat: spec.role },
+        metadata: { wallet: tbaWallet, strat: spec.role, chainOwner: account.address, requestedOwner },
       });
     } catch {
       // non-fatal: the indexer will pick it up later

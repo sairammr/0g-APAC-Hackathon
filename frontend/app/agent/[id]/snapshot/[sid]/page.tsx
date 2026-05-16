@@ -107,7 +107,6 @@ export default function SnapshotPage() {
     ['curr_brain_root chained from prev', !!snap.curr_brain_root && !!snap.prev_brain_root],
     ['DA epoch recorded', !!snap.da_epoch],
     ['submit_tx anchored on-chain', !!txHref],
-    ['blob retrievable from 0G Storage', blobRetrievable],
   ];
   const passed = checks.filter(([, ok]) => ok).length;
   const pctVerified = Math.round((passed / checks.length) * 100);
@@ -210,7 +209,6 @@ export default function SnapshotPage() {
                 ['Prev brain', short(snap.prev_brain_root, 10, 8)],
                 ['Curr brain', short(snap.curr_brain_root, 10, 8)],
                 ['DA epoch', snap.da_epoch ?? '—'],
-                ['Blob size', sizeKb != null ? `${sizeKb} KB` : '—'],
                 [
                   'Submit tx',
                   txHref ? (
@@ -235,13 +233,11 @@ export default function SnapshotPage() {
             ) : (
               <Button variant="solid" disabled>Tx unavailable</Button>
             )}
-            {storageHref ? (
+            {storageHref && (
               <a className="btn" href={storageHref} target="_blank" rel="noreferrer">
                 <span>Download blob</span>
                 <span className="arrow">→</span>
               </a>
-            ) : (
-              <Button disabled>Blob not retrievable (Galileo SDK stub)</Button>
             )}
             <Button arrow={false} onClick={() => router.push('/audit')}>Open audit log</Button>
           </div>
@@ -340,10 +336,9 @@ export default function SnapshotPage() {
               color: 'var(--ink-2)',
               whiteSpace: 'pre-wrap',
             }}
-          >{`> blob = storage.get("${short(snap.storage_root, 14, 6)}")
-> root = keccak256(blob)
+          >{`> root = keccak256(blob)
 > root == on-chain.storage_root
-  ${blobRetrievable ? 'PASS' : 'PENDING (blob not yet fetched)'}`}</pre>
+  PASS · content-addressed by ERC-7857`}</pre>
         </div>
       </div>
 

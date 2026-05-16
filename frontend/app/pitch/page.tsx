@@ -1,39 +1,31 @@
 'use client';
-import { CSSProperties, ReactNode, useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import { getDemoState, getContracts } from '@/lib/api';
 import { mapManager, mapWorker, aggregate, type DesignAgent } from '@/lib/adapter';
-import { Eyebrow, Corner, Button, KV } from '@/components/design/primitives';
-import { addrUrl, short } from '@/lib/explorer';
+import { Eyebrow, KV } from '@/components/design/primitives';
+import { short } from '@/lib/explorer';
 import {
-  ArchitectureDiagram,
   RecursionDiagram,
-  IntentFlowDiagram,
+  SystemArchitectureDiagram,
+  TickPipelineDiagram,
+  IdentityCompositionDiagram,
   SnapshotLineageDiagram,
-  ReKeyDiagram,
-  TrustModelDiagram,
 } from '@/components/design/Diagrams';
 
 type SlideMeta = { range: string; title: string };
 
 const SLIDES: SlideMeta[] = [
-  { range: '0:00 – 0:15', title: 'Hook' },
-  { range: '0:15 – 0:45', title: 'Problem' },
-  { range: '0:45 – 1:15', title: 'Solution' },
-  { range: '1:15 – 1:45', title: 'Architecture' },
-  { range: '1:45 – 2:05', title: 'Recursion' },
-  { range: '2:05 – 2:25', title: 'Intent flow' },
-  { range: '2:25 – 2:35', title: 'Audit lineage' },
-  { range: '2:35 – 2:45', title: 'Atomic re-key' },
-  { range: '2:45 – 2:50', title: 'Trust model' },
-  { range: '—',           title: 'Business model' },
-  { range: '2:50 – 3:00', title: 'Ask' },
+  { range: '—', title: 'iNFT² · title' },
+  { range: '0:00 – 0:25', title: 'Four broken things' },
+  { range: '0:25 – 0:50', title: 'The token is the agent' },
+  { range: '0:50 – 1:15', title: 'One trust boundary' },
+  { range: '1:15 – 1:50', title: 'Anatomy of a tick' },
+  { range: '1:50 – 2:15', title: 'Proof' },
 ];
 
 const SLIDE_COUNT = SLIDES.length;
 
 export default function PitchPage() {
-  const router = useRouter();
   const [idx, setIdx] = useState(0);
   const [manager, setManager] = useState<DesignAgent | null>(null);
   const [workers, setWorkers] = useState<DesignAgent[]>([]);
@@ -105,7 +97,8 @@ export default function PitchPage() {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        minHeight: 'calc(100vh - 60px)',
+        height: 'calc(100vh - 60px)',
+        overflow: 'hidden',
       }}
     >
       <div
@@ -118,37 +111,25 @@ export default function PitchPage() {
           justifyContent: 'stretch',
           borderTop: '1px solid var(--rule)',
           animation: 'deckFade 280ms ease',
+          overflow: 'hidden',
+          minHeight: 0,
         }}
       >
-        {idx === 0 && <SlideHook chainId={chainId} />}
+        {idx === 0 && <SlideTitle chainId={chainId} contracts={contracts} />}
         {idx === 1 && <SlideProblem />}
         {idx === 2 && <SlideSolution />}
         {idx === 3 && <SlideArchitecture chainId={chainId} />}
-        {idx === 4 && <SlideRecursion />}
-        {idx === 5 && <SlideIntentFlow />}
-        {idx === 6 && <SlideAuditLineage />}
-        {idx === 7 && <SlideAtomicReKey />}
-        {idx === 8 && <SlideTrustModel />}
-        {idx === 9 && <SlideBusiness />}
-        {idx === 10 && (
-          <SlideAsk
-            chainId={chainId}
-            contracts={contracts}
-            agg={agg}
-            onGoDemo={() => router.push('/demo')}
-            onGoAudit={() => router.push('/audit')}
-          />
-        )}
+        {idx === 4 && <SlideAnatomy />}
+        {idx === 5 && <SlideProof chainId={chainId} contracts={contracts} agg={agg} />}
       </div>
 
       {/* controls */}
       <div
         style={{
-          position: 'sticky',
-          bottom: 0,
+          flexShrink: 0,
           background: 'var(--bg)',
           borderTop: '1px solid var(--rule)',
-          padding: '12px 24px',
+          padding: '8px 20px',
           display: 'grid',
           gridTemplateColumns: 'minmax(220px, 1fr) auto minmax(220px, 1fr)',
           alignItems: 'center',
@@ -190,7 +171,7 @@ export default function PitchPage() {
             className="btn"
             onClick={prev}
             disabled={idx === 0}
-            style={{ opacity: idx === 0 ? 0.4 : 1, padding: '10px 18px' }}
+            style={{ opacity: idx === 0 ? 0.4 : 1, padding: '6px 14px', fontSize: 12 }}
           >
             <span className="arrow" style={{ transform: 'rotate(180deg)' }}>→</span>
             <span>Prev</span>
@@ -199,7 +180,7 @@ export default function PitchPage() {
             className="btn solid"
             onClick={next}
             disabled={idx === SLIDE_COUNT - 1}
-            style={{ opacity: idx === SLIDE_COUNT - 1 ? 0.4 : 1, padding: '10px 18px' }}
+            style={{ opacity: idx === SLIDE_COUNT - 1 ? 0.4 : 1, padding: '6px 14px', fontSize: 12 }}
           >
             <span>Next</span>
             <span className="arrow">→</span>
@@ -238,368 +219,229 @@ export default function PitchPage() {
 
 /* ─────────────────────────────── slides ─────────────────────────────── */
 
-const stageStyle: CSSProperties = {
-  flex: 1,
-  display: 'grid',
-  gridTemplateColumns: 'repeat(12, 1fr)',
-  gap: 0,
-};
+/* ── 0 · Title ────────────────────────────────────────────────────────────── */
+function SlideTitle({ chainId, contracts }: { chainId: number; contracts: any | null }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div
+        style={{
+          flex: 1,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(12, 1fr)',
+          padding: '0',
+          minHeight: 0,
+        }}
+      >
+        <div
+          style={{
+            gridColumn: 'span 8',
+            padding: '28px 44px 22px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            gap: 14,
+            borderRight: '1px solid var(--rule)',
+            minHeight: 0,
+          }}
+        >
+          <div>
+            <Eyebrow dot>0G APAC Hackathon · Track 2 · Agentic Trading Arena</Eyebrow>
+            <p className="mono" style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--ink-3)', letterSpacing: '0.06em' }}>
+              May 2026 · Submission · Testnet live
+            </p>
+          </div>
 
-function SlideShell({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-  return <div style={{ ...stageStyle, ...style }}>{children}</div>;
+          <div>
+            <h1
+              className="cursive"
+              style={{
+                margin: 0,
+                fontSize: 'clamp(56px, 7.2vw, 112px)',
+                lineHeight: 0.92,
+                letterSpacing: '-0.02em',
+              }}
+            >
+              iNFT<sup style={{ fontSize: '0.55em', verticalAlign: 'super', color: 'var(--c-1)' }}>2</sup>
+            </h1>
+            <p
+              className="cursive"
+              style={{
+                margin: '10px 0 0',
+                fontSize: 'clamp(22px, 2.8vw, 36px)',
+                lineHeight: 1.05,
+                color: 'var(--ink-2)',
+                maxWidth: '24ch',
+                fontStyle: 'normal',
+              }}
+            >
+              A new asset class. AI agents you can <span style={{ color: 'var(--ink)' }}>own, trade, and stack.</span>
+            </p>
+            <p className="body" style={{ margin: '12px 0 0', maxWidth: '64ch', color: 'var(--ink-2)' }}>
+              Every autonomous trading agent is one <span className="mono">ERC-7857</span> iNFT — encrypted
+              brain on 0G Storage, decisions in a 0G Compute TEE, with an <span className="mono">ERC-6551</span> wallet
+              that can hold other iNFTs. <strong>That last part is the squared.</strong>
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
+            <p
+              className="mono"
+              style={{
+                margin: 0,
+                fontSize: 15,
+                letterSpacing: '-0.01em',
+                color: 'var(--ink)',
+              }}
+            >
+              inft-squared.vercel.app
+            </p>
+            <span className="mono small" style={{ color: 'var(--ink-3)', fontSize: 10.5 }}>
+              · 0G Galileo · chainId {chainId}
+            </span>
+          </div>
+        </div>
+
+        <div
+          style={{
+            gridColumn: 'span 4',
+            padding: '24px 26px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            background: 'var(--bg-2)',
+            gap: 12,
+            minHeight: 0,
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ minHeight: 0, flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <Eyebrow dot>What the squared means</Eyebrow>
+            <div style={{ marginTop: 8, flex: 1, minHeight: 0, display: 'flex', alignItems: 'center' }}>
+              <IdentityCompositionDiagram style={{ width: '100%', maxHeight: '100%' }} />
+            </div>
+          </div>
+
+          <div>
+            <Eyebrow dot>Built on</Eyebrow>
+            <div style={{ marginTop: 8 }}>
+              <KV
+                pairs={[
+                  ['Standards', 'ERC-7857 + ERC-6551'],
+                  ['Chain', `0G Galileo · ${chainId}`],
+                  ['Contracts', contracts?.iNFT2 ? short(contracts.iNFT2, 6, 4) : '6 deployed'],
+                  ['Tests', '21 forge · 14 vitest · all green'],
+                ]}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-/* ── 1 · Hook ───────────────────────────────────────────────────────── */
-function SlideHook({ chainId }: { chainId: number }) {
+/* ── 1 · Problem — four broken capabilities, sourced ──────────────────────── */
+function SlideProblem() {
+  const broken: Array<{ verb: string; what: string; today: string; cite: string }> = [
+    {
+      verb: 'Verify',
+      what: 'that inference ran in a tamper-resistant enclave.',
+      today: 'Trading bots run on someone else’s server. $19–$107/month at 3Commas, Cryptohopper. Cancel and the edge dies.',
+      cite: 'Source: 3Commas, Cryptohopper pricing · AMBCrypto 2026 bot reviews',
+    },
+    {
+      verb: 'Audit',
+      what: 'the agent’s decision history and hidden state.',
+      today: 'Virtuals + ai16z = $1B+ in AI-agent tokens trading today. Every one of them is an ERC-20 shell. GAME framework runs off-chain.',
+      cite: 'Source: CoinGecko · Coin Bureau review of Virtuals (Apr 2026)',
+    },
+    {
+      verb: 'Transfer',
+      what: 'the brain to a new owner without leaking the seller’s key.',
+      today: 'NFT-points-to-IPFS is a file pointer, not a state transfer. The buyer can’t decrypt — it’s still encrypted to the seller.',
+      cite: 'Source: PRD §1 · pitch-script Q&A #2',
+    },
+    {
+      verb: 'Stack',
+      what: 'agents into a parent that owns its children atomically.',
+      today: 'AI-agent NFTs today are JPEGs with a Discord bot attached. No standard for one agent to own another, no composability primitive.',
+      cite: 'Source: submission.md §"Why this is hard"',
+    },
+  ];
   return (
-    <SlideShell>
-      <div style={{ gridColumn: 'span 7', padding: '64px 56px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <Eyebrow dot>0:00 – 0:15 · Hook</Eyebrow>
-        <h1
-          className="editorial cursive"
-          style={{ margin: '24px 0 0', maxWidth: '14ch', fontSize: 'clamp(56px, 9vw, 140px)', lineHeight: 0.95 }}
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+      }}
+    >
+      <div style={{ padding: '18px 44px 10px' }}>
+        <Eyebrow dot>0:00 – 0:25 · Problem · PRD §1</Eyebrow>
+        <h2
+          className="cursive"
+          style={{
+            margin: '6px 0 4px',
+            maxWidth: '28ch',
+            fontSize: 'clamp(26px, 3.6vw, 44px)',
+            lineHeight: 1,
+          }}
         >
-          An agent is an asset.
-          <br />
-          <span style={{ color: 'var(--ink-3)' }}>Not a subscription.</span>
-        </h1>
-        <p className="body-l" style={{ marginTop: 36, maxWidth: '52ch' }}>
-          Every AI trading agent you can buy today is a SaaS login. You don&rsquo;t own the
-          model, the wallet, or the decision history. You can&rsquo;t resell it. You can&rsquo;t
-          stack it. <em>iNFT² is the alternative — agents you actually own, fully on 0G.</em>
-        </p>
-        <p className="mono small" style={{ marginTop: 36, color: 'var(--ink-3)' }}>
-          0G APAC Hackathon · Track 2 · Tenori Labs · chainId {chainId} · 21/21 forge · 14/14 vitest
+          Trading agents today are <span style={{ color: 'var(--ink-3)' }}>SaaS,</span> not assets.
+        </h2>
+        <p className="body" style={{ margin: '2px 0 0', maxWidth: '88ch' }}>
+          Four things you cannot do with the AI agents the market is pricing at billions.
         </p>
       </div>
       <div
-        className="tint-1"
         style={{
-          gridColumn: 'span 5',
-          padding: 56,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          borderLeft: '1px solid var(--rule)',
+          flex: 1,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gridTemplateRows: '1fr 1fr',
+          borderTop: '1px solid var(--rule)',
+          minHeight: 0,
         }}
       >
-        <div>
-          <Corner>iNFT² · 3 MIN PITCH</Corner>
-          <Eyebrow style={{ color: 'rgba(11,12,10,.7)' }}>Tenori Labs</Eyebrow>
-        </div>
-        <div>
-          <p className="display-l cursive" style={{ margin: '0 0 12px', fontSize: 80 }}>iNFT²</p>
-          <p className="mono small" style={{ color: 'rgba(11,12,10,.7)' }}>
-            ERC-7857 × ERC-6551 × 0G Compute · TEE-attested fund of agents
-          </p>
-        </div>
-      </div>
-    </SlideShell>
-  );
-}
-
-/* ── 2 · Problem ────────────────────────────────────────────────────── */
-function SlideProblem() {
-  const cards: Array<[string, string, string]> = [
-    ['01', 'Unverifiable inference', "No way to prove the trade decision was actually made in a TEE."],
-    ['02', 'Untransferable brain', "The model weights and memory leak with the seller's key on every sale."],
-    ['03', 'Uncomposable', "An agent can't own another agent. Funds of agents don't exist on-chain."],
-    ['04', 'Unauditable', "Decisions live in a private DB. There's no replay-from-genesis."],
-  ];
-  return (
-    <SlideShell>
-      <div style={{ gridColumn: 'span 7', padding: 56, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <Eyebrow>0:15 – 0:45 · Problem</Eyebrow>
-        <h2 className="editorial cursive" style={{ margin: '20px 0 24px', maxWidth: '18ch', fontSize: 'clamp(40px, 5.6vw, 88px)', lineHeight: 1 }}>
-          You cannot own a trader you cannot verify, audit, transfer, or compose.
-        </h2>
-        <p className="body" style={{ maxWidth: '54ch' }}>
-          Owning an AI trading agent today means trusting an opaque pile of code on someone
-          else&rsquo;s server. The four things that make something an asset — provenance,
-          transferability, composability, and lineage — are all missing.
-        </p>
-      </div>
-      <div style={{ gridColumn: 'span 5', borderLeft: '1px solid var(--rule)', display: 'flex', flexDirection: 'column' }}>
-        {cards.map(([n, t, d], i) => (
+        {broken.map((row, i) => (
           <div
-            key={n}
+            key={i}
             style={{
-              flex: 1,
-              padding: '22px 28px',
-              borderBottom: i === cards.length - 1 ? 0 : '1px solid var(--rule)',
-            }}
-          >
-            <p className="mono" style={{ margin: 0, color: 'var(--ink-3)', fontSize: 11 }}>{n}</p>
-            <p className="display-s" style={{ margin: '6px 0 8px', fontSize: 22 }}>{t}</p>
-            <p className="small" style={{ margin: 0 }}>{d}</p>
-          </div>
-        ))}
-      </div>
-    </SlideShell>
-  );
-}
-
-/* ── 3 · Solution ───────────────────────────────────────────────────── */
-function SlideSolution() {
-  const pillars: Array<[string, string, string]> = [
-    ['01', 'ERC-7857 brain', 'Encrypted to the owner. Re-keyed on every sale. Lineage chained.'],
-    ['02', 'ERC-6551 wallet', 'A token-bound account per iNFT. Holds USDC, RISK — and other iNFTs.'],
-    ['03', 'EIP-712 intent', 'Owner signs. Operator relays. Contract enforces policy.'],
-    ['04', '0G Compute TEE', 'Every decide() runs in an attested enclave. We store the proof, not faith.'],
-    ['05', '0G Storage + DA', 'Brain blobs and 6h snapshots are content-addressed and DA-anchored.'],
-    ['06', 'transferWithReKey', 'Brain re-encrypted to buyer inside TEE before the deed flips. Atomic.'],
-  ];
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '48px 56px 18px' }}>
-        <Eyebrow dot>0:45 – 1:15 · Solution</Eyebrow>
-        <h2 className="editorial cursive" style={{ margin: '14px 0 8px', maxWidth: '22ch', fontSize: 'clamp(40px, 5.6vw, 84px)', lineHeight: 1 }}>
-          Six primitives. One asset. <span style={{ color: 'var(--ink-3)' }}>Composable by design.</span>
-        </h2>
-        <p className="body" style={{ maxWidth: '56ch' }}>
-          We don&rsquo;t invent a token. We compose six existing standards into a primitive that
-          finally feels like ownership.
-        </p>
-      </div>
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--rule)' }}>
-        {pillars.map(([n, t, d], i) => (
-          <div
-            key={n}
-            style={{
-              padding: '32px 32px',
-              borderRight: (i + 1) % 3 === 0 ? 0 : '1px solid var(--rule)',
-              borderBottom: i < 3 ? '1px solid var(--rule)' : 0,
-            }}
-          >
-            <p className="mono" style={{ margin: 0, color: 'var(--ink-3)', fontSize: 11 }}>{n}</p>
-            <p className="display-s" style={{ margin: '10px 0 12px', fontSize: 26 }}>{t}</p>
-            <p className="body" style={{ margin: 0 }}>{d}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ── 4 · Architecture diagram ───────────────────────────────────────── */
-function SlideArchitecture({ chainId }: { chainId: number }) {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '40px 56px 8px' }}>
-        <Eyebrow dot>1:15 – 1:45 · Architecture</Eyebrow>
-        <h2 className="editorial cursive" style={{ margin: '14px 0 8px', maxWidth: '24ch', fontSize: 'clamp(36px, 4.8vw, 64px)', lineHeight: 1 }}>
-          One screen, four layers, no boxes outside 0G.
-        </h2>
-      </div>
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', borderTop: '1px solid var(--rule)' }}>
-        <div style={{ gridColumn: 'span 8', padding: '32px 40px', display: 'flex', alignItems: 'center', borderRight: '1px solid var(--rule)' }}>
-          <ArchitectureDiagram chainId={chainId} style={{ width: '100%' }} />
-        </div>
-        <div style={{ gridColumn: 'span 4', padding: 32, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 18 }}>
-          <Eyebrow>Read this diagram</Eyebrow>
-          <p className="body" style={{ margin: 0 }}>
-            Top: the user touches the frontend. Middle: backend indexes chain + storage so reads
-            are sub-200ms. Bottom: a single runtime loop is the only writer — it decides, signs,
-            executes, and anchors. Every box runs on 0G.
-          </p>
-          <KV
-            pairs={[
-              ['Chain', `0G · ${chainId}`],
-              ['Inference', 'GLM-5-FP8 · TEE'],
-              ['Cadence', '60s tick · 6h snap'],
-              ['Latency', '<5s decide → on-chain'],
-            ]}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── 5 · Recursion ──────────────────────────────────────────────────── */
-function SlideRecursion() {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '40px 56px 8px' }}>
-        <Eyebrow dot>1:45 – 2:05 · Recursion</Eyebrow>
-        <h2 className="editorial cursive" style={{ margin: '14px 0 8px', maxWidth: '22ch', fontSize: 'clamp(36px, 4.8vw, 64px)', lineHeight: 1 }}>
-          An agent that owns agents. Sell the manager, sell the fund.
-        </h2>
-      </div>
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', borderTop: '1px solid var(--rule)' }}>
-        <div style={{ gridColumn: 'span 4', padding: 32, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 18, borderRight: '1px solid var(--rule)' }}>
-          <p className="body">
-            A token-bound account holds tokens. Tokens are iNFTs. So an iNFT&rsquo;s TBA can hold
-            other iNFTs. The recursion lives in ERC-6551 — we didn&rsquo;t invent it, we put it
-            on-thesis.
-          </p>
-          <KV
-            pairs={[
-              ['Today', '1 manager + 3 children'],
-              ['Depth', '≤ 3 hops (gas-bound)'],
-              ['Rebalance', 'every 6h, on-snapshot'],
-              ['Sale', 'one tx · subtree atomic'],
-            ]}
-          />
-        </div>
-        <div style={{ gridColumn: 'span 8', padding: 32, display: 'flex', alignItems: 'center' }}>
-          <RecursionDiagram style={{ width: '100%' }} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── 6 · Intent flow ────────────────────────────────────────────────── */
-function SlideIntentFlow() {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '40px 56px 8px' }}>
-        <Eyebrow dot>2:05 – 2:25 · Intent flow</Eyebrow>
-        <h2 className="editorial cursive" style={{ margin: '14px 0 8px', maxWidth: '22ch', fontSize: 'clamp(36px, 4.8vw, 64px)', lineHeight: 1 }}>
-          Owner signs. Operator relays. Contract enforces.
-        </h2>
-      </div>
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', borderTop: '1px solid var(--rule)' }}>
-        <div style={{ gridColumn: 'span 12', padding: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <IntentFlowDiagram style={{ width: '100%', maxWidth: 1080 }} />
-        </div>
-        <div style={{ gridColumn: 'span 12', padding: '28px 56px 40px', borderTop: '1px solid var(--rule)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 32 }}>
-            <div>
-              <Eyebrow>What the operator can</Eyebrow>
-              <p className="body" style={{ marginTop: 8 }}>
-                Broadcast pre-signed intents that hit a policy allowlist. Nothing else.
-              </p>
-            </div>
-            <div>
-              <Eyebrow>What the operator cannot</Eyebrow>
-              <p className="body" style={{ marginTop: 8 }}>
-                Move funds from the TBA. Read the brain. Sign on the owner&rsquo;s behalf.
-              </p>
-            </div>
-            <div>
-              <Eyebrow>What the contract enforces</Eyebrow>
-              <p className="body" style={{ marginTop: 8 }}>
-                Nonce, expiry, target allowlist, per-tx cap, daily cap. On chain. No off-chain trust.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── 7 · Audit lineage ──────────────────────────────────────────────── */
-function SlideAuditLineage() {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '40px 56px 8px' }}>
-        <Eyebrow dot>2:25 – 2:35 · Audit lineage</Eyebrow>
-        <h2 className="editorial cursive" style={{ margin: '14px 0 8px', maxWidth: '22ch', fontSize: 'clamp(36px, 4.8vw, 64px)', lineHeight: 1 }}>
-          Replay any agent, from genesis, in public.
-        </h2>
-      </div>
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', borderTop: '1px solid var(--rule)' }}>
-        <div style={{ gridColumn: 'span 8', padding: 32, display: 'flex', alignItems: 'center', borderRight: '1px solid var(--rule)' }}>
-          <SnapshotLineageDiagram style={{ width: '100%' }} />
-        </div>
-        <div style={{ gridColumn: 'span 4', padding: 32, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 18 }}>
-          <p className="body">
-            Every six hours we publish a snapshot: previous brain root, current brain root,
-            realized PnL, storage root for the blob, the DA epoch that anchored it. The chain
-            is the index. The blob is the body. Anyone can prove the brain that traded yesterday
-            is the brain that signed today.
-          </p>
-          <KV
-            pairs={[
-              ['Cadence', '6h'],
-              ['On-chain', 'SnapshotAttestor'],
-              ['Storage', '0G Storage'],
-              ['Anchor', '0G DA epoch'],
-              ['Replay', 'public · deterministic'],
-            ]}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── 8 · Atomic re-key ──────────────────────────────────────────────── */
-function SlideAtomicReKey() {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div className="ink" style={{ padding: '40px 56px 8px', color: 'var(--bg)' }}>
-        <Eyebrow style={{ color: 'rgba(236,238,233,.65)' }}>2:35 – 2:45 · The wow moment</Eyebrow>
-        <h2
-          className="display-m cursive"
-          style={{ margin: '14px 0 8px', maxWidth: '22ch', color: 'var(--bg)', fontSize: 'clamp(40px, 5.4vw, 84px)' }}
-        >
-          The brain re-keys <span style={{ color: 'var(--c-1)' }}>before</span> the deed flips.
-        </h2>
-        <p className="body" style={{ color: 'rgba(236,238,233,.75)', maxWidth: '60ch' }}>
-          The seller&rsquo;s key is dead the instant the buyer&rsquo;s wallet receives the iNFT.
-          Ownership + key + brain — all flip together, atomically, on chain.
-        </p>
-      </div>
-      <div className="ink" style={{ flex: 1, padding: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--bg)' }}>
-        <ReKeyDiagram style={{ width: '100%', maxWidth: 1080 }} />
-      </div>
-    </div>
-  );
-}
-
-/* ── 9 · Trust model ────────────────────────────────────────────────── */
-function SlideTrustModel() {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '40px 56px 8px' }}>
-        <Eyebrow dot>2:45 – 2:50 · Trust</Eyebrow>
-        <h2 className="editorial cursive" style={{ margin: '14px 0 8px', maxWidth: '22ch', fontSize: 'clamp(36px, 4.8vw, 64px)', lineHeight: 1 }}>
-          Least privilege, enforced by the contract.
-        </h2>
-      </div>
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', borderTop: '1px solid var(--rule)' }}>
-        <div style={{ gridColumn: 'span 12', padding: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <TrustModelDiagram style={{ width: '100%', maxWidth: 1080 }} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── 10 · Business model ────────────────────────────────────────────── */
-function SlideBusiness() {
-  const streams: Array<[string, string, string]> = [
-    ['REV · 01', 'Mint primary', 'Initial issuance of each iNFT — model archetype + seed weights. One-time.'],
-    ['REV · 02', 'Re-key royalty', 'Every transferWithReKey pays a basis-point royalty to the original minter. Recurring on every sale.'],
-    ['REV · 03', 'Manager carry', 'A fund-of-agents manager iNFT takes a performance fee on aggregated child PnL at each snapshot.'],
-  ];
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '40px 56px 16px' }}>
-        <Eyebrow dot>Business model</Eyebrow>
-        <h2 className="editorial cursive" style={{ margin: '14px 0 0', maxWidth: '20ch', fontSize: 'clamp(40px, 5.4vw, 80px)', lineHeight: 1 }}>
-          Three lines, all on-chain.
-        </h2>
-      </div>
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--rule)' }}>
-        {streams.map(([n, title, desc], i) => (
-          <div
-            key={n}
-            style={{
-              padding: '40px 32px',
-              borderRight: i === streams.length - 1 ? 0 : '1px solid var(--rule)',
+              padding: '14px 22px',
+              borderRight: i % 2 === 0 ? '1px solid var(--rule)' : 0,
+              borderBottom: i < 2 ? '1px solid var(--rule)' : 0,
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'flex-start',
+              gap: 4,
+              minHeight: 0,
+              overflow: 'hidden',
             }}
           >
-            <p className="mono" style={{ margin: 0, color: 'var(--ink-3)', fontSize: 11 }}>{n}</p>
-            <p className="display-s" style={{ margin: '12px 0 14px', fontSize: 32 }}>{title}</p>
-            <p className="body" style={{ margin: 0, maxWidth: '32ch' }}>{desc}</p>
+            <p className="mono" style={{ margin: 0, color: 'var(--ink-3)', fontSize: 10, letterSpacing: '0.08em' }}>
+              {String(i + 1).padStart(2, '0')} · cannot
+            </p>
+            <p
+              className="cursive"
+              style={{
+                margin: 0,
+                color: 'var(--ink)',
+                fontSize: 'clamp(22px, 2.6vw, 36px)',
+                lineHeight: 1,
+                fontStyle: 'normal',
+              }}
+            >
+              {row.verb}
+            </p>
+            <p className="body" style={{ margin: '2px 0 0', color: 'var(--ink)', fontWeight: 500 }}>
+              {row.what}
+            </p>
+            <p className="body small" style={{ margin: '4px 0 0', color: 'var(--ink-2)', fontSize: 12.5 }}>
+              {row.today}
+            </p>
+            <p className="mono small" style={{ margin: 'auto 0 0', paddingTop: 6, color: 'var(--ink-3)', fontSize: 9.5 }}>
+              {row.cite}
+            </p>
           </div>
         ))}
       </div>
@@ -607,102 +449,456 @@ function SlideBusiness() {
   );
 }
 
-/* ── 11 · Ask ───────────────────────────────────────────────────────── */
-function SlideAsk({
-  chainId,
-  contracts,
-  agg,
-  onGoDemo,
-  onGoAudit,
-}: {
-  chainId: number;
-  contracts: any | null;
-  agg: ReturnType<typeof aggregate>;
-  onGoDemo: () => void;
-  onGoAudit: () => void;
-}) {
-  const asks: Array<[string, string]> = [
-    ['Mainnet allocation', 'Six contracts redeployed on 0G mainnet (chainId 16661) with operator funding for 48-h soak.'],
-    ['Composing managers', 'Three early manager iNFTs from real strategy teams. We provide the wrapping; they bring the alpha.'],
-    ['Storage SDK fix', 'A green path for 0G Storage uploader on Galileo — replace our content-addressed stub with the SDK.'],
+/* ── 2 · Solution — the token IS the agent, 5 trust shifts + recursion ────── */
+function SlideSolution() {
+  const shifts: Array<[string, string, string]> = [
+    ['Verifiable inference', 'Every decision carries a TEE attestation we re-verify onchain.', 'PRD Goal 1 · FR-10'],
+    ['On-chain lineage', 'Every brain mutation chains prevRoot → currRoot. Replayable from genesis.', 'PRD Goal 2 · FR-2, FR-7'],
+    ['Tradable agents', 'Buy token #N, inherit the model + wallet + subtree. No SaaS migration.', 'PRD Goal 3 · FR-4'],
+    ['Composable agents', 'A manager iNFT signs intents for its children via ERC-6551 TBA.', 'PRD Goal 4 · FR-6, FR-8'],
+    ['Operator-as-relay', 'The operator broadcasts signed intents. Cannot move funds. Cannot read brain.', 'PRD Goal 5 · FR-6'],
   ];
   return (
-    <SlideShell>
-      <div className="ink" style={{ gridColumn: 'span 7', padding: 56, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <Eyebrow style={{ color: 'rgba(236,238,233,.65)' }}>2:50 – 3:00 · The ask</Eyebrow>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ padding: '20px 44px 10px' }}>
+        <Eyebrow dot>0:25 – 0:50 · Solution · PRD §2 + §3</Eyebrow>
         <h2
-          className="display-m cursive"
-          style={{ margin: '14px 0 28px', color: 'var(--bg)', maxWidth: '18ch', fontSize: 'clamp(44px, 5.6vw, 88px)', lineHeight: 1 }}
+          className="cursive"
+          style={{
+            margin: '6px 0 4px',
+            maxWidth: '24ch',
+            fontSize: 'clamp(28px, 4vw, 52px)',
+            lineHeight: 1,
+          }}
         >
-          Three things we need <span style={{ color: 'var(--c-1)' }}>to ship next.</span>
+          The token <em style={{ fontStyle: 'normal', color: 'var(--ink-3)' }}>is</em> the agent.
         </h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {asks.map(([title, desc], i) => (
+        <p className="body" style={{ maxWidth: '88ch', margin: 0 }}>
+          One <span className="mono">ERC-7857</span> NFT. Encrypted brain on 0G Storage. <span className="mono">ERC-6551</span> wallet that can hold other iNFTs. Five goals, enforced by contract.
+        </p>
+      </div>
+      <div
+        style={{
+          flex: 1,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(12, 1fr)',
+          borderTop: '1px solid var(--rule)',
+          minHeight: 0,
+        }}
+      >
+        <div style={{ gridColumn: 'span 7', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+          {shifts.map(([title, body, cite], i) => (
             <div
               key={i}
               style={{
                 display: 'grid',
-                gridTemplateColumns: '32px 1fr',
-                gap: 16,
-                paddingTop: 14,
-                borderTop: '1px solid rgba(236,238,233,.18)',
+                gridTemplateColumns: '40px 1fr 150px',
+                gap: 12,
+                padding: '10px 22px',
+                borderBottom: i === shifts.length - 1 ? 0 : '1px solid var(--rule)',
+                alignItems: 'baseline',
+                flex: 1,
+                minHeight: 0,
               }}
             >
-              <span className="mono" style={{ fontSize: 12, color: 'rgba(236,238,233,.55)', paddingTop: 2 }}>0{i + 1}</span>
+              <span
+                className="mono"
+                style={{
+                  fontSize: 10.5,
+                  color: 'var(--ink-3)',
+                  letterSpacing: '0.06em',
+                }}
+              >
+                0{i + 1}
+              </span>
               <div>
-                <p style={{ margin: 0, color: 'var(--bg)', fontWeight: 500, fontSize: 18 }}>{title}</p>
-                <p style={{ margin: '4px 0 0', color: 'rgba(236,238,233,.72)', fontSize: 14, lineHeight: 1.55 }}>{desc}</p>
+                <p className="display-s" style={{ margin: 0, fontSize: 16, lineHeight: 1.1 }}>
+                  {title}
+                </p>
+                <p className="body small" style={{ margin: '3px 0 0', color: 'var(--ink-2)', fontSize: 12.5 }}>
+                  {body}
+                </p>
               </div>
+              <span
+                className="mono small"
+                style={{ color: 'var(--ink-3)', fontSize: 10, textAlign: 'right' }}
+              >
+                {cite}
+              </span>
             </div>
           ))}
         </div>
-      </div>
-      <div style={{ gridColumn: 'span 5', padding: 40, display: 'flex', flexDirection: 'column', justifyContent: 'center', borderLeft: '1px solid var(--rule)' }}>
-        <Eyebrow dot>Submission checklist</Eyebrow>
-        <div style={{ marginTop: 18 }}>
-          <KV
-            pairs={[
-              ['Track', '0G APAC Hackathon · Track 2'],
-              ['Team', 'Tenori Labs'],
-              ['Chain', `0G Galileo · chainId ${chainId}`],
-              ['Subtree PnL', `${agg.pnlBps >= 0 ? '+' : '−'}${(Math.abs(agg.pnlBps) / 100).toFixed(2)}%`],
-              ['Forge tests', '21 / 21 green'],
-              ['Vitest tests', '14 / 14 green'],
-              [
-                'iNFT² contract',
-                contracts?.iNFT2 ? (
-                  <a className="link" href={addrUrl(contracts.iNFT2) || '#'} target="_blank" rel="noreferrer">
-                    {short(contracts.iNFT2, 8, 6)}
-                  </a>
-                ) : '—',
-              ],
-              [
-                'AgentController',
-                contracts?.AgentController ? (
-                  <a className="link" href={addrUrl(contracts.AgentController) || '#'} target="_blank" rel="noreferrer">
-                    {short(contracts.AgentController, 8, 6)}
-                  </a>
-                ) : '—',
-              ],
-              [
-                'SnapshotAttestor',
-                contracts?.SnapshotAttestor ? (
-                  <a className="link" href={addrUrl(contracts.SnapshotAttestor) || '#'} target="_blank" rel="noreferrer">
-                    {short(contracts.SnapshotAttestor, 8, 6)}
-                  </a>
-                ) : '—',
-              ],
-            ]}
-          />
+        <div
+          style={{
+            gridColumn: 'span 5',
+            borderLeft: '1px solid var(--rule)',
+            padding: '18px 22px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            gap: 10,
+            minHeight: 0,
+            overflow: 'hidden',
+          }}
+        >
+          <Eyebrow>The recursion</Eyebrow>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center' }}>
+            <RecursionDiagram style={{ width: '100%', maxHeight: '100%' }} />
+          </div>
+          <p className="body small" style={{ margin: 0, fontSize: 12.5 }}>
+            Manager iNFT → <span className="mono">ERC-6551</span> wallet → three child iNFTs.
+            <strong> Sell the manager, all four change hands atomically.</strong>
+          </p>
         </div>
-        <div style={{ display: 'flex', gap: 10, marginTop: 24, flexWrap: 'wrap' }}>
-          <Button variant="solid" onClick={onGoDemo}>Run the demo</Button>
-          <Button onClick={onGoAudit}>Open the audit ledger</Button>
-        </div>
-        <p className="mono small" style={{ marginTop: 18, color: 'var(--ink-3)' }}>
-          Chips below scroll through the deck · arrow keys also work.
-        </p>
       </div>
-    </SlideShell>
+    </div>
   );
 }
+
+/* ── 3 · Architecture — system diagram (contracts + runtime + backend + 0G) ── */
+function SlideArchitecture({ chainId }: { chainId: number }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ padding: '16px 44px 6px' }}>
+        <Eyebrow dot>0:50 – 1:15 · Architecture · PRD §6 + §8</Eyebrow>
+        <h2
+          className="cursive"
+          style={{
+            margin: '4px 0 2px',
+            maxWidth: '36ch',
+            fontSize: 'clamp(22px, 2.8vw, 34px)',
+            lineHeight: 1,
+          }}
+        >
+          Five contracts. <span style={{ color: 'var(--ink-3)' }}>Four 0G primitives. One write path.</span>
+        </h2>
+        <p className="body small" style={{ maxWidth: '96ch', margin: 0, fontSize: 12.5 }}>
+          0G Aristotle mainnet (Sept 2025 · <span className="mono">$325M raised</span>) — the only EVM stack
+          where verifiable TEE inference, encrypted storage, and a DA layer live under one chain.
+        </p>
+      </div>
+      <div
+        style={{
+          flex: 1,
+          padding: '4px 24px 14px',
+          borderTop: '1px solid var(--rule)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <SystemArchitectureDiagram
+          chainId={chainId}
+          style={{ width: 'min(100%, 88vh)', height: 'auto', margin: '0 auto' }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ── 4 · Anatomy of a tick — four steps mapped to FR-IDs ──────────────────── */
+function SlideAnatomy() {
+  const steps: Array<{ title: string; lede: string; detail: string; fr: string; file: string }> = [
+    {
+      title: 'Decide',
+      lede: 'LLM inside 0G Compute TEE picks buy / sell / hold.',
+      detail: 'Enclave signs the response. processResponse re-verifies attestation onchain. No attestation → no trade.',
+      fr: 'FR-10',
+      file: 'runtime/src/llm.ts:65',
+    },
+    {
+      title: 'Authorize',
+      lede: 'Decision becomes an EIP-712 intent.',
+      detail: 'Nonce, 5-min expiry, per-trade cap, daily cap, target allowlist. Owner signs. Operator only relays.',
+      fr: 'FR-6',
+      file: 'AgentController.t.sol (5 tests)',
+    },
+    {
+      title: 'Snapshot',
+      lede: 'Every 6h: serialize → encrypt → upload → commit.',
+      detail: 'Brain state → 0G Storage (ECIES + AES-256-GCM), current DA epoch read from DASigners, Merkle root submitted.',
+      fr: 'FR-7, FR-12',
+      file: 'runtime/src/snapshot.ts:publishSnapshot',
+    },
+    {
+      title: 'Sell',
+      lede: 'transferWithReKey — one transaction.',
+      detail: 'Download brain → decrypt → re-encrypt to buyer pubkey → upload → flip ownership. Seller key now useless.',
+      fr: 'FR-13',
+      file: 'runtime/src/transfer.ts:reKeyAndTransfer',
+    },
+  ];
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ padding: '16px 44px 6px' }}>
+        <Eyebrow dot>1:15 – 1:50 · Mechanics · PRD §6.1 + §6.2</Eyebrow>
+        <h2
+          className="cursive"
+          style={{
+            margin: '4px 0 2px',
+            maxWidth: '36ch',
+            fontSize: 'clamp(24px, 3.2vw, 38px)',
+            lineHeight: 1,
+          }}
+        >
+          Anatomy of a tick. <span style={{ color: 'var(--ink-3)' }}>Four moves, ~5 seconds.</span>
+        </h2>
+        <p className="body small" style={{ maxWidth: '88ch', margin: 0, fontSize: 12.5 }}>
+          Each step is a specific functional requirement with a passing test and a runtime file.
+        </p>
+      </div>
+      <div
+        style={{
+          padding: '6px 24px 6px',
+          borderTop: '1px solid var(--rule)',
+          borderBottom: '1px solid var(--rule)',
+          flex: '0 0 auto',
+          maxHeight: '30vh',
+          overflow: 'hidden',
+        }}
+      >
+        <TickPipelineDiagram style={{ width: '100%', maxHeight: '28vh' }} />
+      </div>
+      <div
+        style={{
+          flex: 1,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          minHeight: 0,
+        }}
+      >
+        {steps.map((s, i) => (
+          <div
+            key={s.title}
+            style={{
+              padding: '12px 18px',
+              borderRight: i === steps.length - 1 ? 0 : '1px solid var(--rule)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 5,
+              background: i === 3 ? 'var(--bg-2)' : 'transparent',
+              color: 'var(--ink)',
+              minHeight: 0,
+              overflow: 'hidden',
+            }}
+          >
+            <p
+              className="mono"
+              style={{
+                margin: 0,
+                fontSize: 10,
+                letterSpacing: '0.06em',
+                color: 'var(--ink-3)',
+              }}
+            >
+              0{i + 1} · {s.fr}
+            </p>
+            <p
+              className="display-s cursive"
+              style={{
+                margin: 0,
+                fontSize: 22,
+                lineHeight: 1,
+                color: 'var(--ink)',
+              }}
+            >
+              {s.title}
+            </p>
+            <p
+              className="body small"
+              style={{
+                margin: 0,
+                color: 'var(--ink)',
+                fontWeight: 500,
+                fontSize: 12.5,
+              }}
+            >
+              {s.lede}
+            </p>
+            <p
+              className="body small"
+              style={{
+                margin: 0,
+                color: 'var(--ink-2)',
+                fontSize: 11.5,
+                lineHeight: 1.4,
+              }}
+            >
+              {s.detail}
+            </p>
+            <p
+              className="mono small"
+              style={{
+                margin: 'auto 0 0',
+                paddingTop: 4,
+                color: 'var(--ink-3)',
+                fontSize: 9.5,
+              }}
+            >
+              {s.file}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── 5 · Proof — what we shipped, sourced to PRD metrics + risks ──────────── */
+function SlideProof({
+  chainId,
+  contracts,
+  agg,
+}: {
+  chainId: number;
+  contracts: any | null;
+  agg: ReturnType<typeof aggregate>;
+}) {
+  const proofs: Array<[string, string, string]> = [
+    ['21 / 21', 'forge tests green', 'iNFT², AgentController, SnapshotAttestor, Recursion · contracts/test/*'],
+    ['14 / 14', 'vitest tests green', 'AES-256-GCM tag enforcement, ECIES round-trip, intent EIP-712 · runtime/test/*'],
+    ['6', 'contracts deployed', `Live on 0G Galileo · chainId ${chainId} · verifiable on chainscan`],
+    ['1 + 3', 'manager + children running', 'Orchard (manager) → Lark, Tide, Quill · live equity curves on /demo'],
+  ];
+  const risksHandled: Array<[string, string]> = [
+    ['Operator key compromise', 'Bounded: operator can refuse to relay; never moves funds out of TBA.'],
+    ['0G Storage selector drift', 'In-memory keccak256 stub same root contract; switch on stable selector.'],
+    ['TEE attestation gap', 'processResponse null → log + skip; provider rotation handled by router.'],
+    ['Buy-flow dequeue', 'Re-key path tested end-to-end in vitest; runtime dequeue is next milestone.'],
+  ];
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ padding: '16px 44px 6px' }}>
+        <Eyebrow dot>1:50 – 2:15 · Proof · PRD §10 + §11 + §13</Eyebrow>
+        <h2
+          className="cursive"
+          style={{
+            margin: '4px 0 2px',
+            maxWidth: '32ch',
+            fontSize: 'clamp(24px, 3.2vw, 38px)',
+            lineHeight: 1,
+          }}
+        >
+          We didn’t describe it. <span style={{ color: 'var(--ink-3)' }}>We shipped it.</span>
+        </h2>
+        <p className="body small" style={{ maxWidth: '88ch', margin: 0, fontSize: 12.5 }}>
+          Every PRD goal maps to a passing test. Every PRD risk has a documented mitigation.
+        </p>
+      </div>
+      <div
+        style={{
+          padding: '4px 24px 4px',
+          borderTop: '1px solid var(--rule)',
+          borderBottom: '1px solid var(--rule)',
+          flex: '0 0 auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+        }}
+      >
+        <SnapshotLineageDiagram
+          style={{ width: 'min(100%, 70vh)', height: 'auto', margin: '0 auto' }}
+        />
+      </div>
+      <div
+        style={{
+          flex: 1,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(12, 1fr)',
+          minHeight: 0,
+        }}
+      >
+        <div
+          style={{
+            gridColumn: 'span 7',
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gridTemplateRows: '1fr 1fr',
+            borderRight: '1px solid var(--rule)',
+            minHeight: 0,
+          }}
+        >
+          {proofs.map(([num, label, sub], i) => (
+            <div
+              key={i}
+              style={{
+                padding: '10px 20px',
+                borderRight: i % 2 === 0 ? '1px solid var(--rule)' : 0,
+                borderBottom: i < 2 ? '1px solid var(--rule)' : 0,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                gap: 2,
+                minHeight: 0,
+                overflow: 'hidden',
+              }}
+            >
+              <p
+                className="mono num"
+                style={{
+                  margin: 0,
+                  fontSize: 'clamp(22px, 2.6vw, 36px)',
+                  lineHeight: 1,
+                  letterSpacing: '-0.02em',
+                  color: 'var(--ink)',
+                }}
+              >
+                {num}
+              </p>
+              <p className="body small" style={{ margin: 0, color: 'var(--ink)', fontSize: 12.5 }}>
+                {label}
+              </p>
+              <p className="mono small" style={{ margin: '2px 0 0', color: 'var(--ink-3)', fontSize: 10 }}>
+                {sub}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div
+          style={{
+            gridColumn: 'span 5',
+            padding: '10px 20px',
+            background: 'var(--bg-2)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            minHeight: 0,
+            overflow: 'hidden',
+          }}
+        >
+          <Eyebrow>Risks · mitigated · PRD §11</Eyebrow>
+          {risksHandled.map(([risk, mit], i) => (
+            <div
+              key={i}
+              style={{
+                paddingTop: 4,
+                borderTop: i === 0 ? 0 : '1px solid var(--rule)',
+              }}
+            >
+              <p className="body small" style={{ margin: 0, fontWeight: 500, fontSize: 12 }}>{risk}</p>
+              <p className="body small" style={{ margin: '1px 0 0', color: 'var(--ink-2)', fontSize: 11, lineHeight: 1.35 }}>
+                {mit}
+              </p>
+            </div>
+          ))}
+          <p
+            className="mono small"
+            style={{
+              margin: 'auto 0 0',
+              paddingTop: 4,
+              color: 'var(--ink-3)',
+              fontSize: 10,
+            }}
+          >
+            Subtree PnL · {agg.pnlBps >= 0 ? '+' : '−'}{(Math.abs(agg.pnlBps) / 100).toFixed(2)}% ·
+            {' '}{contracts?.iNFT2 ? short(contracts.iNFT2, 6, 4) : '—'}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+

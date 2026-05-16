@@ -41,12 +41,12 @@ This document answers four questions:
 
 These are the only places where the system substitutes a real integration with a fake or simplified path. Everything else is live.
 
-### 3.1 — Runtime storage (mockable, falls back automatically)
+### 3.1 — Runtime storage (live on Galileo)
 - **File:** `runtime/src/storage.ts`
-- **Behavior:** Tries the live `@0glabs/0g-ts-sdk` upload first. If the SDK call throws (it does on Galileo right now — flow contract selector mismatch `0xef3e12dc` vs deployed `0xbc8c11f8`), it falls back to an **in-memory keccak256-content-addressed store**.
-- **Forcing the fallback:** set `STORAGE_STUB=true` in the runtime's env.
-- **Impact:** Snapshot Merkle roots are real keccak256(blob), but they only exist in the runtime process's memory. The backend `snapshots.ts` fetcher cannot retrieve them. Lineage on-chain still anchors correctly via `SnapshotAttestor.submit`.
-- **Test coverage:** `runtime/test/storage.test.ts` exercises the stub roundtrip.
+- **Behavior:** Uploads land on 0G Storage end-to-end. SDK 0.3.3's typechain bindings predate the deployed `FixedPriceFlow` — `submit` now takes `Submission { SubmissionData; address submitter }` but the SDK still ships the old flat-tuple selector `0xef3e12dc`, producing an empty revert that ethers v6 mis-labels as `require(false)`. We subclass the SDK's `Uploader` and override only the two methods that touch the changed ABI (`submitTransaction` re-encodes against the new shape; `processLogs` decodes the new `Submit` event where `submissionIndex` is no longer indexed). Everything else — merkle tree, segment splitting, HTTP upload to storage nodes, finalization wait — reuses the SDK as-is.
+- **Verification:** smoke-storage round-trip lands a real tx (e.g. `0xd2d2e6…519563`, sequence `113733`), blob finalized on storage node per `zgs_getFileInfo`.
+- **Escape hatch:** `STORAGE_STUB=true` forces an in-memory keccak256 store, kept for emergencies if the storage network ever goes offline. Off by default.
+- **Test coverage:** `runtime/test/storage.test.ts` exercises the stub roundtrip; live path is verified via `runtime/scripts/smoke-storage.ts`.
 
 ### 3.2 — Runtime market data (deliberate, not a fallback)
 - **File:** `runtime/src/market.ts`

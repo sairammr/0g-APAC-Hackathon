@@ -31,7 +31,14 @@ contract SnapshotAttestor {
 
     function submit(uint256 tokenId, Snapshot calldata s) external {
         require(msg.sender == relayer, "not relayer");
-        require(signers.isSigner(s.daEpoch, relayer), "relayer not in DA quorum");
+        // DA quorum membership is asserted only when a real DASigners registry
+        // is wired in. Deploying with signers = address(0) relaxes the check;
+        // the daEpoch field is still anchored from the precompile and chained
+        // into the prev/curr brain root lineage, so tamper-evidence is
+        // preserved on the storage-root path.
+        if (address(signers) != address(0)) {
+            require(signers.isSigner(s.daEpoch, relayer), "relayer not in DA quorum");
+        }
         _snaps[tokenId].push(s);
         emit SnapshotPublished(tokenId, s.timestamp, s.storageRoot, s.sharpeE6, s.daEpoch);
     }

@@ -22,6 +22,7 @@
 12. [Deploy to testnet](#12-deploy-to-testnet)
 13. [Run locally](#13-run-locally)
 14. [Testing](#14-testing)
+15. [For reviewers / judges](#15-for-reviewers--judges)
 
 ---
 
@@ -63,7 +64,7 @@ Existing AI agent NFTs are JPEGs with a Discord bot attached. To make agents a r
 | Live frontend | https://inft-squared.vercel.app |
 | GitHub repo | https://github.com/sairammr/0g-APAC-Hackathon |
 | Primary on-chain (iNFT2) | https://chainscan-galileo.0g.ai/address/0xc9CA0707BcD500Bd00361e6e615DF42F6C08eD6b |
-| X post | https://x.com/sairammr1/status/2055612391338238430 |
+| X post | https://x.com/sairammr1/status/2055615979321962720 |
 | Pitch deck | https://inft-squared.vercel.app/pitch (11 slides) |
 | Guided demo | https://inft-squared.vercel.app/demo (6 steps) |
 

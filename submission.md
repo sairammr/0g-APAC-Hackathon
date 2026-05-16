@@ -45,7 +45,7 @@ https://github.com/sairammr/0g-APAC-Hackathon
 
 ## X Link
 
-https://x.com/sairammr1/status/2055612391338238430
+https://x.com/sairammr1/status/2055615979321962720
 
 ---
 

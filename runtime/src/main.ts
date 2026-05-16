@@ -9,7 +9,8 @@ import { signIntent, submitChildIntent, nextNonce, buildSwap, buildApprove, type
 import { publishSnapshot } from './snapshot.js';
 import { netValue, computeSharpeE6, balanceOf } from './pnl.js';
 import { pub, addr, abis } from './chain.js';
-import { insertEquity, insertTick, equitySeries, listPendingTransfers, markTransferDone, markTransferFailed } from './db.js';
+import { insertEquity, insertTick, insertSnapshot, equitySeries, getLatestBrainRoot, listPendingTransfers, markTransferDone, markTransferFailed } from './db.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import { reKeyAndTransfer } from './transfer.js';
 
 const log = pino({ level: process.env.LOG_LEVEL || 'info' });
@@ -42,6 +43,37 @@ const BRAIN_PRIVKEY = BRAIN_PRIVKEY_HEX ? Buffer.from(BRAIN_PRIVKEY_HEX, 'hex') 
 
 let lastSnapshotAt = 0;
 const lastActionByChild: Record<string, string> = {};
+
+// Paper portfolio state: each agent starts with 1.0e18 wei (1 ETH-equivalent
+// notional) of cash + 0 risk position. buy/sell decisions move cash↔position
+// at the current market price. This lets us write a real equity time series
+// per tick even without an on-chain DEX.
+const PAPER_START = 10n ** 18n;
+const paperCash: Record<string, bigint> = {};
+const paperRisk: Record<string, bigint> = {}; // risk asset units (e6-scaled)
+function paperInit(id: string) {
+  if (paperCash[id] === undefined) { paperCash[id] = PAPER_START; paperRisk[id] = 0n; }
+}
+function paperApply(id: string, action: string, sizeBps: number, price: number) {
+  paperInit(id);
+  if (action === 'hold' || sizeBps === 0) return;
+  // Price scaled to e6 to keep bigint math safe.
+  const priceE6 = BigInt(Math.max(1, Math.floor(price * 1e6)));
+  if (action === 'buy') {
+    const spend = (paperCash[id] * BigInt(sizeBps)) / 10000n;
+    paperCash[id] -= spend;
+    paperRisk[id] += (spend * 1_000_000n) / priceE6;
+  } else if (action === 'sell') {
+    const sell = (paperRisk[id] * BigInt(sizeBps)) / 10000n;
+    paperRisk[id] -= sell;
+    paperCash[id] += (sell * priceE6) / 1_000_000n;
+  }
+}
+function paperEquity(id: string, price: number): bigint {
+  paperInit(id);
+  const priceE6 = BigInt(Math.max(1, Math.floor(price * 1e6)));
+  return paperCash[id] + (paperRisk[id] * priceE6) / 1_000_000n;
+}
 
 async function getWallet(tokenId: bigint): Promise<`0x${string}`> {
   return pub.readContract({
@@ -95,6 +127,10 @@ async function runChild(child: { id: bigint; strat: string }, market: { price: n
   log.info({ child: child.id.toString(), decision, teeVerified: tee.teeVerified }, 'child decision');
   lastActionByChild[child.id.toString()] = decision.action;
 
+  // Apply decision to paper portfolio and record equity for every tick.
+  paperApply(child.id.toString(), decision.action, decision.sizeBps, market.price);
+  const eqNow = paperEquity(child.id.toString(), market.price);
+
   if (DB_ENABLED) {
     try {
       await insertTick({
@@ -106,6 +142,11 @@ async function runChild(child: { id: bigint; strat: string }, market: { price: n
       });
     } catch (e: any) {
       log.warn({ err: e?.message }, 'db insertTick failed');
+    }
+    try {
+      await insertEquity(child.id, eqNow);
+    } catch (e: any) {
+      log.warn({ err: e?.message }, 'db insertEquity failed');
     }
   }
 
@@ -174,8 +215,21 @@ async function snapshotAll(price: number) {
       const sharpe = computeSharpeE6(series);
       const equity = DEX_AVAILABLE ? await netValue(wallet, DUSD, DRISK, price) : 0n;
       const realizedPnL = series.length > 0 ? equity - series[0] : 0n;
-      const { prev: prevBrainRoot, curr: currBrainRoot } = await getBrainRoots(id);
-      const { root, tx } = await publishSnapshot({
+      // Real lineage chain: prev = the previous snapshot's curr from the DB
+      // (falls back to the contract's stored root on first ever snapshot, or
+      // zero if neither exists). curr = keccak256 of (prev || ts || equity)
+      // which guarantees a different root per snapshot AND threads each
+      // snapshot's content into the next root deterministically.
+      const dbPrev = DB_ENABLED ? await getLatestBrainRoot(id).catch(() => null) : null;
+      const contractRoots = await getBrainRoots(id);
+      const prevBrainRoot = (dbPrev as `0x${string}` | null) ?? contractRoots.curr ?? ZERO_ROOT;
+      const seed = Buffer.concat([
+        Buffer.from(prevBrainRoot.slice(2), 'hex'),
+        Buffer.from(BigInt(Math.floor(Date.now() / 1000)).toString(16).padStart(16, '0'), 'hex'),
+        Buffer.from(equity.toString(16).padStart(64, '0'), 'hex'),
+      ]);
+      const currBrainRoot = ('0x' + Buffer.from(keccak_256(seed)).toString('hex')) as `0x${string}`;
+      const res = await publishSnapshot({
         tokenId: id,
         prevBrainRoot,
         currBrainRoot,
@@ -184,7 +238,23 @@ async function snapshotAll(price: number) {
         memoryDiff: Buffer.alloc(0),
         actions: [],
       });
-      log.info({ id: id.toString(), sharpe, pnL: realizedPnL.toString(), root, tx }, 'snapshot published');
+      if (DB_ENABLED) {
+        try {
+          await insertSnapshot({
+            tokenId: id,
+            storageRoot: res.root,
+            prevBrainRoot,
+            currBrainRoot,
+            realizedPnL,
+            sharpeE6: sharpe,
+            daEpoch: res.daEpoch,
+            txHash: res.tx,
+          });
+        } catch (e: any) {
+          log.warn({ id: id.toString(), err: e?.message }, 'db insertSnapshot failed');
+        }
+      }
+      log.info({ id: id.toString(), sharpe, pnL: realizedPnL.toString(), root: res.root, tx: res.tx, daEpoch: res.daEpoch.toString(), attestorErr: res.attestorError }, 'snapshot published');
     } catch (e: any) {
       log.warn({ id: id.toString(), err: e?.shortMessage || e?.message }, 'snapshot failed');
     }

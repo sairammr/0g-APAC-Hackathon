@@ -17,10 +17,17 @@ export const addrUrl = (addr: unknown): string | null =>
 export const blockUrl = (n: number | string): string =>
   `${CHAINSCAN}/block/${n}`;
 
-// 0G Storage Merkle root. The blob hosting layer is content-addressed; the
-// scanner serves the file directly under /file/<root>.
-export const storageUrl = (root: unknown): string | null =>
-  isHex(root) && root !== '0xstub' ? `${STORAGESCAN}/file/${root}` : null;
+// 0G Storage Merkle root. The scanner serves real uploads under /file/<root>,
+// but on Galileo today the runtime's 0G Storage SDK (0.3.3) hits a selector
+// mismatch and falls back to a process-local keccak256 stub. The resulting
+// root is valid hex but no public node has the blob, so storagescan 404s.
+// Return null until the upload path is fixed — every caller already degrades
+// gracefully to displaying the short hash without a link. _STORAGESCAN ref'd
+// here only to keep the constant alive for the day we re-enable it.
+export const storageUrl = (_root: unknown): string | null => {
+  void STORAGESCAN;
+  return null;
+};
 
 // 0G Compute receipts are not browsable on a public scanner today — the
 // chatId / request_id is the broker's internal correlation id. We surface it
