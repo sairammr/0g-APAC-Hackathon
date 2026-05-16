@@ -221,7 +221,21 @@ Each iNFT has a deterministic TBA. The manager iNFT's TBA owns the three child i
 
 ## 7. Deployed addresses
 
-Network: 0G Galileo, chainId **16602**
+### 0G Aristotle Mainnet, chainId **16661** (primary)
+
+| Contract | Address | Explorer |
+|---|---|---|
+| iNFT2 (ERC-7857) | `0x9dAFD6fAb4550aB4A01FED07a3122639B7e4785F` | [view](https://chainscan.0g.ai/address/0x9dAFD6fAb4550aB4A01FED07a3122639B7e4785F) |
+| AgentController | `0x8ab16889819B7cb11E6Cb4895e6a312915A85764` | [view](https://chainscan.0g.ai/address/0x8ab16889819B7cb11E6Cb4895e6a312915A85764) |
+| SnapshotAttestor | `0xb19bD647674a9D1245fc0055d5556Ef1a2BE061E` | [view](https://chainscan.0g.ai/address/0xb19bD647674a9D1245fc0055d5556Ef1a2BE061E) |
+| BrainKeyRegistry | `0x5eFDEA1c610b8f2688Df7C05807f1d77B594dF4C` | [view](https://chainscan.0g.ai/address/0x5eFDEA1c610b8f2688Df7C05807f1d77B594dF4C) |
+| ERC6551Account (impl) | `0x476Da3028880d1089D9417004f5575B484bAEC92` | [view](https://chainscan.0g.ai/address/0x476Da3028880d1089D9417004f5575B484bAEC92) |
+| ERC6551Registry | `0xd7519f7226dB76C17D75264f8ebF6b248d203581` | [view](https://chainscan.0g.ai/address/0xd7519f7226dB76C17D75264f8ebF6b248d203581) |
+| Operator EOA | `0x6Ff34CC9FeDA06C2297f87F8A4f1072790e356EA` | [view](https://chainscan.0g.ai/address/0x6Ff34CC9FeDA06C2297f87F8A4f1072790e356EA) |
+
+Canonical record: [`contracts/deployments/mainnet.json`](contracts/deployments/mainnet.json).
+
+### 0G Galileo Testnet, chainId **16602**
 
 | Contract | Address | Explorer |
 |---|---|---|
@@ -233,7 +247,7 @@ Network: 0G Galileo, chainId **16602**
 | ERC6551Registry | `0xC8a286097394631C49D0ED9A414a9D8c89b21F75` | [view](https://chainscan-galileo.0g.ai/address/0xC8a286097394631C49D0ED9A414a9D8c89b21F75) |
 | Operator EOA | `0x2931be85049AB879831506007258E1A104F09bB5` | [view](https://chainscan-galileo.0g.ai/address/0x2931be85049AB879831506007258E1A104F09bB5) |
 
-Seeded subtree:
+Seeded subtree (testnet):
 
 | Role | Token ID | Token-bound wallet |
 |---|---|---|

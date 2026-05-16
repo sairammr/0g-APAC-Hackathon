@@ -1,0 +1,13 @@
+{
+  "chainId": 16661,
+  "rpc": "https://evmrpc.0g.ai",
+  "explorer": "https://chainscan.0g.ai",
+  "operator": "0x6Ff34CC9FeDA06C2297f87F8A4f1072790e356EA",
+  "BrainKeyRegistry": "0x5eFDEA1c610b8f2688Df7C05807f1d77B594dF4C",
+  "iNFT2": "0x9dAFD6fAb4550aB4A01FED07a3122639B7e4785F",
+  "ERC6551Account": "0x476Da3028880d1089D9417004f5575B484bAEC92",
+  "ERC6551Registry": "0xd7519f7226dB76C17D75264f8ebF6b248d203581",
+  "SnapshotAttestor": "0xb19bD647674a9D1245fc0055d5556Ef1a2BE061E",
+  "AgentController": "0x8ab16889819B7cb11E6Cb4895e6a312915A85764",
+  "deployedAt": "2026-05-16T18:54:00Z"
+}
