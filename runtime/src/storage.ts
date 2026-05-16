@@ -1,4 +1,4 @@
-import { Indexer, MemData } from '@0glabs/0g-ts-sdk';
+import { Indexer, MemData, StorageNode, Uploader } from '@0glabs/0g-ts-sdk';
 import { ethers } from 'ethers';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,20 +16,14 @@ const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 const indexer = new Indexer(INDEXER_URL);
 
 /**
- * Stub mode is a hackathon fallback for when the live 0G SDK upload reverts
- * due to the flow-contract selector mismatch on Galileo (SDK 0.3.3 vs deployed
- * flow contract). When enabled, uploads are kept in an in-memory map keyed by
- * keccak256(data) — the same content-addressing scheme the network would use,
- * so downstream consumers (snapshots, transfers, smoke tests) keep working.
- *
- * Toggle via `STORAGE_STUB=true` in the environment.
+ * Stub mode is a hackathon escape hatch — when the on-chain submit path is
+ * truly broken (e.g. the storage nodes are offline), fall back to a local
+ * content-addressed map so the rest of the pipeline keeps working. Toggle
+ * with `STORAGE_STUB=true`. With the new-ABI fix below the live path should
+ * succeed on Galileo and this flag stays off.
  */
 const STORAGE_STUB = process.env.STORAGE_STUB === 'true';
 
-/**
- * Exported only for tests. Module-private content-addressed store used in
- * stub mode and as a fallback when the live SDK call throws.
- */
 export const _stubStore: Map<string, Buffer> = new Map();
 
 function stubUpload(data: Buffer): { root: `0x${string}`; tx: `0x${string}` } {
@@ -41,28 +35,134 @@ function stubUpload(data: Buffer): { root: `0x${string}`; tx: `0x${string}` } {
 }
 
 /**
- * Upload an arbitrary Buffer payload to 0G Storage and return the
- * Merkle root + on-chain submission tx hash. Bytes are stored as-is —
- * encrypt at the brainKey layer before calling this.
+ * The deployed FixedPriceFlow on Galileo has been upgraded: `submit` now
+ * takes `Submission { SubmissionData data; address submitter; }` (the wrapper
+ * adds an explicit `submitter` field). SDK 0.3.3's typechain bindings still
+ * use the old flat `(length, tags, nodes)` selector (0xef3e12dc), so every
+ * SDK upload reverts with empty data — which ethers v6 mis-labels as
+ * `require(false)`.
+ *
+ * This minimal ABI matches the deployed contract and is what we hand to
+ * ethers.Contract so `flow.submit(...)` encodes the right calldata and
+ * `flow.interface.parseLog(submitEvent)` decodes the new Submit event
+ * shape (submitter is the first indexed arg).
  */
-export async function uploadBytes(data: Buffer): Promise<{ root: `0x${string}`; tx: `0x${string}` }> {
-  if (STORAGE_STUB) {
-    return stubUpload(data);
+const FLOW_ABI_NEW = [
+  'function market() view returns (address)',
+  'function submit(((uint256 length, bytes tags, (bytes32 root, uint256 height)[] nodes) data, address submitter) submission) payable returns (uint256, bytes32, uint256, uint256)',
+  'event Submit(address indexed sender, bytes32 indexed identity, uint256 submissionIndex, uint256 startPos, uint256 length, (uint256 length, bytes tags, (bytes32 root, uint256 height)[] nodes) submission)',
+];
+
+const MARKET_ABI = ['function pricePerSector() view returns (uint256)'];
+
+/**
+ * Subclass of the SDK's Uploader that overrides just the two methods that
+ * encode/decode `submit` — everything else (segment splitting, HTTP uploads,
+ * finalization wait) is inherited unchanged.
+ */
+class V2Uploader extends Uploader {
+  // @ts-expect-error — accessing parent's private flow contract
+  private get flowContract(): ethers.Contract { return this.flow; }
+
+  async submitTransaction(submission: any, _opts: any, _retryOpts?: any): Promise<[any, Error | null]> {
+    try {
+      const marketAddr: string = await (this.flowContract as any).market();
+      const market = new ethers.Contract(marketAddr, MARKET_ABI, provider);
+      const pricePerSector: bigint = await market.pricePerSector();
+
+      let sectors = 0n;
+      for (const n of submission.nodes) sectors += 1n << BigInt(n.height.toString());
+      const fee = sectors * pricePerSector;
+
+      const submitterAddr = await signer.getAddress();
+      const wrapped = [
+        [
+          BigInt(submission.length.toString()),
+          submission.tags,
+          submission.nodes.map((n: any) => [n.root, BigInt(n.height.toString())]),
+        ],
+        submitterAddr,
+      ];
+
+      const gasPrice = (await provider.getFeeData()).gasPrice ?? 0n;
+      console.log('[v2 uploader] sending submit tx, fee =', fee.toString(), 'wei');
+      const resp = await (this.flowContract as any).submit(wrapped, {
+        value: fee,
+        gasPrice,
+      });
+      const tx = await resp.wait();
+      if (!tx) return [null, new Error('submit tx returned null receipt')];
+      const receipt = await provider.getTransactionReceipt(tx.hash);
+      if (!receipt) return [null, new Error('failed to fetch receipt')];
+      return [receipt, null];
+    } catch (e) {
+      return [null, e as Error];
+    }
   }
+
+  async processLogs(receipt: any): Promise<number[]> {
+    const contractAddr = (await (this.flowContract as any).getAddress()).toLowerCase();
+    const submitEvent = this.flowContract.interface.getEvent('Submit');
+    if (!submitEvent) return [];
+    const seqs: number[] = [];
+    for (const log of receipt.logs) {
+      if (log.address.toLowerCase() !== contractAddr) continue;
+      if (log.topics[0] !== submitEvent.topicHash) continue;
+      try {
+        const parsed = this.flowContract.interface.parseLog(log);
+        if (parsed?.name === 'Submit') {
+          seqs.push(Number(parsed.args.submissionIndex));
+        }
+      } catch { /* skip non-matching logs */ }
+    }
+    return seqs;
+  }
+}
+
+/**
+ * Custom upload that bypasses Indexer.upload — instead, selects nodes via
+ * the indexer, builds an ethers.Contract with the new-ABI flow, and drives
+ * the V2Uploader directly. Falls back to the stub on any error so the rest
+ * of the runtime keeps making progress.
+ */
+async function liveUpload(data: Buffer): Promise<{ root: `0x${string}`; tx: `0x${string}` }> {
+  const mem = new MemData(data);
+  const [tree, treeErr] = await mem.merkleTree();
+  if (treeErr || !tree) throw treeErr ?? new Error('merkle tree failed');
+  const root = tree.rootHash() as `0x${string}`;
+
+  // Select a replica-satisfying subset of trusted nodes via the indexer's
+  // own picker (same logic the SDK uses internally). One node is rarely
+  // enough — shard configs need to cover the full shard space.
+  const [clients, selErr] = await indexer.selectNodes(1);
+  if (selErr || !clients || clients.length === 0) {
+    throw selErr ?? new Error('no storage nodes selected');
+  }
+  const status = await clients[0].getStatus();
+  if (!status) throw new Error('failed to get status from selected node');
+  const flowAddr = status.networkIdentity.flowAddress;
+
+  const flow = new ethers.Contract(flowAddr, FLOW_ABI_NEW, signer);
+  const uploader = new V2Uploader(clients, RPC, flow as any, 0n, 0n);
+
+  const opts = {
+    tags: '0x',
+    finalityRequired: true,
+    taskSize: 10,
+    expectedReplica: 1,
+    skipTx: false,
+    fee: 0n,
+  };
+
+  const [res, err] = await uploader.uploadFile(mem, opts as any);
+  if (err) throw err;
+  return { root, tx: (res.txHash || '0x') as `0x${string}` };
+}
+
+export async function uploadBytes(data: Buffer): Promise<{ root: `0x${string}`; tx: `0x${string}` }> {
+  if (STORAGE_STUB) return stubUpload(data);
   try {
-    // Buffer extends Uint8Array which satisfies ArrayLike<number>, so no copy needed.
-    const mem = new MemData(data);
-    const [tree, treeErr] = await mem.merkleTree();
-    if (treeErr) throw treeErr;
-    const root = tree!.rootHash();
-    if (!root) throw new Error('failed to compute root hash');
-    // The 0g-ts-sdk's `Signer` type is bound to its CJS copy of ethers, while
-    // we import the ESM build. The runtime objects are identical; we cast
-    // through `any` to bridge the dual-package hazard.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [res, upErr] = await indexer.upload(mem, RPC, signer as any);
-    if (upErr) throw upErr;
-    return { root: root as `0x${string}`, tx: res.txHash as `0x${string}` };
+    return await liveUpload(data);
   } catch (err) {
     const msg = (err as Error)?.message ?? String(err);
     console.warn('[storage] live upload failed, falling back to content-addressed stub:', msg);
@@ -70,14 +170,6 @@ export async function uploadBytes(data: Buffer): Promise<{ root: `0x${string}`; 
   }
 }
 
-/**
- * Download a payload from 0G Storage by Merkle root. The SDK only exposes
- * `download(root, filePath, proof)` — it writes to disk, so we round-trip
- * through a temp file and return the raw Buffer.
- *
- * The stub store is checked first so anything uploaded via the in-memory
- * fallback path round-trips without hitting the network.
- */
 export async function downloadBytes(root: string): Promise<Buffer> {
   const cached = _stubStore.get(root);
   if (cached) return cached;
