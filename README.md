@@ -65,11 +65,12 @@ Existing AI agent NFTs are JPEGs with a Discord bot attached. To make agents a r
 | Live frontend | https://inft-squared.vercel.app |
 | GitHub repo | https://github.com/sairammr/0g-APAC-Hackathon |
 | Primary on-chain (iNFT2) | https://chainscan-galileo.0g.ai/address/0xc9CA0707BcD500Bd00361e6e615DF42F6C08eD6b |
+| X post | https://x.com/sairammr1/status/2055612391338238430 |
 | Galileo explorer | https://chainscan-galileo.0g.ai |
 | Galileo RPC | https://evmrpc-testnet.0g.ai |
 | Galileo faucet | https://faucet.0g.ai |
-| Pitch deck | `/pitch` (11 slides) |
-| Guided demo | `/demo` (6 steps) |
+| Pitch deck | https://inft-squared.vercel.app/pitch (11 slides) |
+| Guided demo | https://inft-squared.vercel.app/demo (6 steps) |
 
 ## 4. Architecture
 

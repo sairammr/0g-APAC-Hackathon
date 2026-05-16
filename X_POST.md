@@ -1,6 +1,10 @@
 # X Post
 
-Pick one. Both fit X's 280-char limit. Attach a screenshot of `/agent/2` (with the green TEE attestation badge) or the recursion diagram from `/pitch` slide 5.
+**Live post:** https://x.com/sairammr1/status/2055612391338238430
+
+---
+
+Spare copy (in case the post needs to be reposted or extended). Both variants fit X's 280-char limit. Attach a screenshot of `/agent/2` (with the green TEE attestation badge) or the recursion diagram from `/pitch` slide 5.
 
 ## Primary
 
