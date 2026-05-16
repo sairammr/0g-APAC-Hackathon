@@ -17,13 +17,11 @@
 7. [Deployed addresses](#7-deployed-addresses)
 8. [Recursion model](#8-recursion-model)
 9. [Trust model](#9-trust-model)
-10. [Demo video](#10-demo-video)
-11. [Prerequisites](#11-prerequisites)
-12. [Setup and install](#12-setup-and-install)
-13. [Deploy to testnet](#13-deploy-to-testnet)
-14. [Run locally](#14-run-locally)
-15. [Testing](#15-testing)
-16. [License](#16-license)
+10. [Prerequisites](#10-prerequisites)
+11. [Setup and install](#11-setup-and-install)
+12. [Deploy to testnet](#12-deploy-to-testnet)
+13. [Run locally](#13-run-locally)
+14. [Testing](#14-testing)
 
 ---
 
@@ -66,9 +64,6 @@ Existing AI agent NFTs are JPEGs with a Discord bot attached. To make agents a r
 | GitHub repo | https://github.com/sairammr/0g-APAC-Hackathon |
 | Primary on-chain (iNFT2) | https://chainscan-galileo.0g.ai/address/0xc9CA0707BcD500Bd00361e6e615DF42F6C08eD6b |
 | X post | https://x.com/sairammr1/status/2055612391338238430 |
-| Galileo explorer | https://chainscan-galileo.0g.ai |
-| Galileo RPC | https://evmrpc-testnet.0g.ai |
-| Galileo faucet | https://faucet.0g.ai |
 | Pitch deck | https://inft-squared.vercel.app/pitch (11 slides) |
 | Guided demo | https://inft-squared.vercel.app/demo (6 steps) |
 
@@ -208,8 +203,6 @@ Every iNFT has a deterministic TBA from the canonical `(salt, chainId, tokenCont
 ## 7. Deployed addresses
 
 Network: 0G Galileo, chainId **16602**
-RPC: `https://evmrpc-testnet.0g.ai`
-Explorer: `https://chainscan-galileo.0g.ai`
 
 | Contract | Address | Explorer |
 |---|---|---|
@@ -260,21 +253,8 @@ What the operator can and cannot do:
 
 Trust assumption: **the iNFT owner's private key, the 0G TEE attestation, and the storage Merkle-root binding are all sound.** Everything else is replayable from public state.
 
-## 10. Demo video
 
-Under 3 minutes. Hits the four mandatory beats: core functionality, user flow, how 0G is actually used, on-chain proof.
-
-| Time | Beat | What's on screen |
-|---|---|---|
-| 0:00 | Hook + title | "An AI agent you can own, trade, and stack." |
-| 0:15 | Recursion in 10s | Landing; recursion diagram. The squared in one breath. |
-| 0:30 | Mint | `/create`. Brain encrypted to owner pubkey (ECIES), blob uploaded to 0G Storage, root committed in `iNFT2` on Galileo. Tx link. |
-| 1:00 | Live tick | `/agent/2` dashboard. Runtime calls 0G Compute Router (TEE). Attestation badge flips green after `processResponse`. EIP-712 intent signed by owner. Broadcast through TBA. Equity curve updates. |
-| 1:45 | Snapshot lineage | `/agent/2/snapshot/[sid]`. Prev brain root, curr brain root, DA epoch, storage root, on-chain attestation tx. |
-| 2:15 | transferWithReKey | `/agent/2/buy`. Buyer signs. Brain re-encrypts inside TEE to buyer's pubkey. ERC-721 transfers. New owner's dashboard shows a decryptable brain. |
-| 2:45 | Recursion close | Manager executing a child intent through its TBA. Cut to logo. |
-
-## 11. Prerequisites
+## 10. Prerequisites
 
 - **Foundry** (any recent) — `curl -L https://foundry.paradigm.xyz | bash && foundryup`
 - **Node 20+** and **pnpm 9+**
@@ -283,7 +263,7 @@ Under 3 minutes. Hits the four mandatory beats: core functionality, user flow, h
 - **A Privy app** (any plan). `App ID`.
 - **A 0G Compute API key**. Create at https://pc.testnet.0g.ai with scope `inference`.
 
-## 12. Setup and install
+## 11. Setup and install
 
 ```bash
 git clone https://github.com/sairammr/0g-APAC-Hackathon
@@ -296,9 +276,9 @@ git submodule update --init --recursive
 (cd frontend && pnpm install)
 ```
 
-## 13. Deploy to testnet
+## 12. Deploy to testnet
 
-Skip if you want to use the existing deployment in §7.
+Skip if you want to use the existing deployment in [§7](#7-deployed-addresses).
 
 ```bash
 cd contracts
@@ -321,7 +301,7 @@ cd backend
 supabase db push   # or paste supabase/migrations/*.sql in the Supabase SQL editor
 ```
 
-## 14. Run locally
+## 13. Run locally
 
 Three processes, three terminals. Each package has an `.env.example`.
 
@@ -351,7 +331,7 @@ pnpm run dev
 
 Open `http://localhost:3000`.
 
-## 15. Testing
+## 14. Testing
 
 ```bash
 cd contracts && forge test -vv       # 21 forge tests
@@ -365,6 +345,3 @@ Highlights:
 - `contracts/test/Recursion.t.sol` — manager iNFT executing a child intent via its TBA.
 - `contracts/test/iNFT2.t.sol` — `transferWithReKey` atomicity.
 
-## 16. License
-
-MIT.
