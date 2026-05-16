@@ -151,7 +151,56 @@ Existing "AI agent NFTs" are JPEGs with a Discord bot attached. To make agents a
   README.md              This file
 ```
 
-## 5. 0G primitives we use
+## 5. 0G primitives we use (deep dive)
+
+Every component below is wired into the live system. Each entry says **what we use it for**, **how it works in our code**, and **where to read it**. This is the section judges should start with.
+
+### 0G Chain (chainId 16602, Galileo testnet)
+
+All six product contracts are deployed and verified on Galileo. Every EIP-712 intent is submitted to `AgentController`. Every snapshot is committed to `SnapshotAttestor`. Brain root commitments and re-key state live in `iNFT2` + `BrainKeyRegistry`. Code: `contracts/src/*`.
+
+### 0G Compute (TEE inference via the Router)
+
+Every strategy decision — momentum, mean-reversion, market-making, manager rebalance — is an LLM call through the 0G Compute Router with `verify_tee: true`. After the response we call `broker.inference.processResponse(provider, chatId)` to independently verify the TEE attestation. A failed attestation aborts the tick: we never act on an inference we cannot verify.
+
+This is the **Sealed Inference / TEE-based execution** that Track 2 specifically rewards. The strategy state never leaves the enclave, which mitigates front-running by design.
+
+- Model: `zai-org/GLM-5-FP8`
+- Router: `https://router-api-testnet.integratenetwork.work/v1` on testnet, `https://router-api.0g.ai/v1` on mainnet
+- Code: `runtime/src/llm.ts`, `runtime/src/strategies/{momentum,meanRev,marketMaker,manager}.ts`
+
+### 0G Storage (encrypted brain blobs + 6-hour snapshots)
+
+Every iNFT's brain is encrypted with ECIES (secp256k1 ECDH + AES-256-GCM) to the current owner's pubkey, uploaded to 0G Storage, and its Merkle root is committed on-chain in `iNFT2`. Every 6 hours the runtime publishes a full snapshot (positions, PnL, equity curve, decision log) to 0G Storage and writes the storage root into `SnapshotAttestor`.
+
+This single pipe gives us two product primitives for free: **long-context memory** (brain blobs are how an agent remembers state across ticks) and **auditable lineage** (snapshots chain prev brain root to curr brain root, so tampering breaks the chain publicly).
+
+- Code: `runtime/src/storage.ts`, `runtime/src/brainKey.ts`, `runtime/src/snapshot.ts`
+- Transfer flow re-encrypts the brain to the buyer's pubkey atomically: `runtime/src/transfer.ts`
+
+### 0G DA (DASigners precompile at `0x...1000`)
+
+`SnapshotAttestor` reads the current DA epoch from the `IDASigners` precompile and embeds it in every snapshot row. Any indexer can verify the snapshot landed in DA without re-uploading the blob.
+
+- Code: `contracts/src/SnapshotAttestor.sol`, `contracts/src/interfaces/IDASigners.sol`, `runtime/src/snapshot.ts`
+
+### ERC-7857 iNFT (encrypted, transferable brain)
+
+`iNFT2.sol` implements the draft ERC-7857 surface: every token tracks an encrypted brain root, an owner pubkey, and a `transferWithReKey` entry point that atomically re-encrypts the brain to the buyer's key and transfers the ERC-721 in one transaction.
+
+- Code: `contracts/src/iNFT2.sol`, `contracts/src/BrainKeyRegistry.sol`, `contracts/src/interfaces/IERC7857.sol`
+
+### ERC-6551 token-bound account (the recursion)
+
+Every iNFT has a deterministic TBA from the canonical `(salt, chainId, tokenContract, tokenId)` formula. The manager iNFT's TBA is the on-chain owner of the three child iNFTs — that is the squared. `AgentController.executeChildIntent` recurses through the parent's TBA to broadcast a child trade in the same transaction.
+
+- Code: `contracts/src/ERC6551Registry.sol`, `contracts/src/ERC6551Account.sol`, `contracts/src/AgentController.sol`
+- Recursion test: `contracts/test/Recursion.t.sol`
+
+### Summary table
+
+| 0G primitive | How we use it | Code |
+|---|---|---|
 
 | 0G primitive | How we use it | Code |
 |---|---|---|
